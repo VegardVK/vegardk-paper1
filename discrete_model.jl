@@ -7,9 +7,7 @@ using CPLEX
 include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
 include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
 
-
-
-function define_and_solve_model()
+function read_input_data()
     # Read input data
     wind_df = DataFrame(XLSX.readtable("output/wind_ts_data.xlsx", "Sheet1", infer_eltypes=true))
     hydro_df = DataFrame(XLSX.readtable("output/hydro_data.xlsx", "Sheet1", infer_eltypes=true))
@@ -37,6 +35,12 @@ function define_and_solve_model()
     I_disch, I_spill, I_bypass = find_connected_plants(hydro_df)
 
     C_shedding, C_dumping, C_startup = get_cost_parameters()
+    return wind_df, hydro_df, inflow_df, load_df, plant_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup
+end
+
+
+function define_and_solve_model()
+    wind_df, hydro_df, inflow_df, load_df, plant_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
 
     model = Model()
     set_optimizer(model, CPLEX.Optimizer)
@@ -107,20 +111,8 @@ end
 
 
 function write_results(model)
-    wind_df = DataFrame(XLSX.readtable("output/wind_ts_data.xlsx", "Sheet1", infer_eltypes=true))
-    hydro_df = DataFrame(XLSX.readtable("output/hydro_data.xlsx", "Sheet1", infer_eltypes=true))
-    inflow_df = DataFrame(XLSX.readtable("output/inflow_data.xlsx", "Sheet1", infer_eltypes=true))
-    load_df = DataFrame(XLSX.readtable("output/load_data.xlsx", "Sheet1", infer_eltypes=true))
-    plant_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
-    line_df = DataFrame(XLSX.readtable("output/line_data.xlsx", "Sheet1", infer_eltypes=true))
 
-    A = unique(plant_df.area)
-    P = unique(plant_df.plant_id)
-    T = unique(load_df.timestep)
-    L = unique(line_df.line_id)
-
-    P_h = unique(plant_df[plant_df.fuel_type .== "Hydro", :plant_id])
-
+    wind_df, hydro_df, inflow_df, load_df, plant_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
 
     production = value.(model[:production])
     uc = value.(model[:status])
