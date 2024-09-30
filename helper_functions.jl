@@ -1,6 +1,7 @@
 using Plots
 using DataFrames
 using JuMP
+using AxisArrays
 
 
 function plot_all_columns_df(df, title="", filename="", y_lim=false)
@@ -64,8 +65,8 @@ end
 
 
 function get_cost_parameters()
-    C_shedding = 10000
+    C_shedding = 1000
     C_dumping = 10
-    C_startup = 10
+    C_startup = 100
     return C_shedding, C_dumping, C_startup
 end

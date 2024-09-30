@@ -119,67 +119,68 @@ function get_converted_df_separated_timesteps(weights, sampling_points)
 end
 
 
-function find_and_write_demand_weights(bernstein_degree)
-    load_df = DataFrame(XLSX.readtable("output/load_data.xlsx", "Sheet1", infer_eltypes=true))
+function find_and_write_demand_weights(bernstein_degree, time_steps, areas)
+    # file_path = "consumption.xlsx"
+    # xf = XLSX.readxlsx(file_path)
+    # sh = xf["Sheet1"]
+    # demand = sh[2:end, 3]
+    # demand = [demand[i] for i in 1:(length(demand))]
+    # println(demand)
+    load_df = get_load(areas, time_steps)
     weights_df = DataFrame()
-    A = unique(load_df.area)
-    for a in A
-        area_load = load_df[load_df.area .== a, :Forbruk]
+    for a in 1:areas
+        area_load = load_df[:, "$a"]
         parameters = define_parameters(area_load, bernstein_degree, 100)
         df = define_problem(parameters)
-        df.b = 0:bernstein_degree
-        df_long = stack(df, Not(:b), variable_name="timestep", value_name="Forbruk")
-        df_long.timestep = parse.(Int, df_long.timestep)
-        df_long.area .= a
-        weights_df = vcat(weights_df, df_long)
+        weights_df = vcat(weights_df, df)
+        # df = round.(df, digits=2)
     end
-    weights_df.Forbruk = round.(weights_df.Forbruk, digits=2)
-    XLSX.writetable("output/load_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+    CSV.write("input/load_weights.csv", weights_df)
 end
 
-function find_and_write_wind_weights(bernstein_degree)
-    wind_df = DataFrame(XLSX.readtable("output/wind_ts_data.xlsx", "Sheet1", infer_eltypes=true))
+function find_and_write_inflow_weights(bernstein_degree, time_steps)
+    inflow_df = get_inflow(time_steps)
     weights_df = DataFrame()
-    P = unique(wind_df.plant_id)
-    for p in P
-        plant_wind_ts = wind_df[wind_df.plant_id .== p, :wind_power]
-        parameters = define_parameters(plant_wind_ts, bernstein_degree, 100)
+    plants  = names(inflow_df)
+    plants_sorted = sort(plants)
+    for p in plants_sorted
+        plant_inflow = inflow_df[:, "$p"]
+        parameters = define_parameters(plant_inflow, bernstein_degree, 100)
         df = define_problem(parameters)
-        df.b = 0:bernstein_degree
-        df_long = stack(df, Not(:b), variable_name="timestep", value_name="wind_power")
-        df_long.timestep = parse.(Int, df_long.timestep)
-        df_long.plant_id .= p
-        weights_df = vcat(weights_df, df_long)
+        df = round.(df, digits = 1)
+        weights_df = vcat(weights_df, df)
     end
-    weights_df.wind_power = round.(weights_df.wind_power, digits=2)
-    XLSX.writetable("output/wind_ts_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+    CSV.write("input/inflow_weights.csv", weights_df)
 end
 
 
-function find_and_write_inflow_weights(bernstein_degree)
-    inflow_df = DataFrame(XLSX.readtable("output/inflow_data.xlsx", "Sheet1", infer_eltypes=true))
+
+function find_and_write_capacity_weights(bernstein_degree, n_power_plants)
+    file_path = "input/max_production.csv"
+    # capacity = [1, 2, 3, 4, 5]
+    capacity = [c for c in 1:n_power_plants]
+    parameters = define_parameters(capacity, bernstein_degree, 100)
+    df = define_problem(parameters)
+    df = round.(df, digits=2)
+    CSV.write("input/capacity_weights.csv", df)
+end
+
+function find_and_write_wind_weights(bernstein_degree, time_steps)
+    wind_ts_df = get_wind_ts()
     weights_df = DataFrame()
-    P = unique(inflow_df.plant_id)
-    for p in P
-        plant_inflow_ts = inflow_df[inflow_df.plant_id .== p, :inflow]
-        parameters = define_parameters(plant_inflow_ts, bernstein_degree, 100)
+    plants = names(wind_ts_df) # Rekkefølgen på tidsseriene blir kanskje ikke riktig. Vurder å sorter dem + sorter ved lesing og kobling senere
+    for p in plants
+        wind_ts = wind_ts_df[1:time_steps, "$p"]
+        parameters = define_parameters(wind_ts, bernstein_degree, 100)
         df = define_problem(parameters)
-        df.b = 0:bernstein_degree
-        df_long = stack(df, Not(:b), variable_name="timestep", value_name="inflow")
-        df_long.timestep = parse.(Int, df_long.timestep)
-        df_long.plant_id .= p
-        weights_df = vcat(weights_df, df_long)
+        df = round.(df, digits = 2)
+        weights_df = vcat(weights_df, df)
     end
-    weights_df.inflow = round.(weights_df.inflow, digits=2)
-    XLSX.writetable("output/inflow_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+    CSV.write("input/wind_ts_weights.csv", weights_df)
 end
 
 
 nB = 3
 # find_and_write_demand_weights(nB)
-# find_and_write_wind_weights(nB)
-# find_and_write_inflow_weights(nB)
-
-
 # find_and_write_capacity_weights()
 # find_bernstein_weights()

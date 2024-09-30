@@ -35,12 +35,12 @@ function read_input_data()
     I_disch, I_spill, I_bypass = find_connected_plants(hydro_df)
 
     C_shedding, C_dumping, C_startup = get_cost_parameters()
-    return wind_df, hydro_df, inflow_df, load_df, plant_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup
+    return wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup
 end
 
 
 function define_and_solve_model()
-    wind_df, hydro_df, inflow_df, load_df, plant_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
+    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
 
     model = Model()
     set_optimizer(model, CPLEX.Optimizer)
@@ -112,7 +112,7 @@ end
 
 function write_results(model)
 
-    wind_df, hydro_df, inflow_df, load_df, plant_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
+    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
 
     production = value.(model[:production])
     uc = value.(model[:status])

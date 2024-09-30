@@ -10,5 +10,4 @@ process_plant_data()
 
 model = define_and_solve_model()
 write_results(model)
-
-calculate_objective_components()
+calculate_objective_components_discrete()

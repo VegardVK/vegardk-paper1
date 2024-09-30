@@ -418,7 +418,7 @@ function main()
     # find_and_write_demand_weights(nB, nT, nA)
     # find_and_write_inflow_weights(nB, nT)
     # find_and_write_capacity_weights(1, nP)
-    find_and_write_wind_weights(nB, nT)
+    # find_and_write_wind_weights(nB, nT)
 
     model, p_dict = define_model(nB, nT, nP, sampling_points, nA)
     plot_model_results(model, p_dict)
