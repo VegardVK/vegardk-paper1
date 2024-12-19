@@ -5,6 +5,7 @@ using Interpolations
 using Statistics
 using Random
 using Distributions
+using Dates
 
 include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
 
@@ -67,9 +68,14 @@ function process_wind_ts_data(steps_per_hour, scenarios)
             extended_plant_df.plant_id .= p
             append!(extended_df, extended_plant_df)
         end
+        df = extended_df
+
     end
-    df = extended_df
+    target_peak_wind = 200
+    multiplier = (target_peak_wind/maximum(df.wind_power)) 
+    df.wind_power .= df.wind_power .* multiplier 
     df = generate_scenarios(df, :wind_power, scenarios)
+
     XLSX.writetable("output/wind_ts_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 
 end
@@ -79,8 +85,6 @@ function get_wind_ts(year=2020, month=1, day=1)
     df = CSV.read(file_path, DataFrame)
     filtered_df = subset(df, :Year => ByRow(==(year)), :Month => ByRow(==(month)), :Day => ByRow(==(day)))
     select!(filtered_df, Not([:Year, :Month, :Day, :Period]))
-    multiplier = 0.3
-    filtered_df .= filtered_df .*multiplier
     return filtered_df 
 end
 
@@ -112,7 +116,7 @@ function process_hydro_data(steps_per_hour)
 end
 
 
-function process_load_data(steps_per_hour, scenarios)
+function process_load_data_old(steps_per_hour, scenarios)
     file_path = "input/consumption.xlsx"
     df = DataFrame(XLSX.readtable(file_path, "Sheet1", infer_eltypes=true))
     multiplier = 200
@@ -140,8 +144,64 @@ function process_load_data(steps_per_hour, scenarios)
     display(df)
 
     XLSX.writetable("output/load_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+end
 
 
+function process_load_data(steps_per_hour, scenarios)
+    caiso_load_df = CSV.read("input/CAISO load data/CAISO-netdemand-20190101.csv", DataFrame)
+    nyiso_load_df = CSV.read("input/NYISO load data/20190101pal.csv", DataFrame, delim=",")
+
+    rename!(nyiso_load_df, "Time Stamp" => "timestamp", "Load" => "load")
+    nyiso_load_df.timestamp = map(String, nyiso_load_df.timestamp)
+    nyiso_load_df.timestamp = DateTime.(nyiso_load_df.timestamp, dateformat"dd/mm/yyyy HH:MM:SS")
+    filter!(row -> second(row.timestamp) == 0, nyiso_load_df)
+    nyiso_load_df = nyiso_load_df[nyiso_load_df.Name .== "HUD VL", ["timestamp", "load"]]    
+    nyiso_load_df = change_resolution(nyiso_load_df, steps_per_hour)
+    hydro_load_df = DataFrame(
+        load = nyiso_load_df.load,
+        area = fill(3, nrow(nyiso_load_df)),
+        timestep = 1:nrow(nyiso_load_df)
+    )
+    target_load_peak_hydro = 680
+    hydro_load_df.load .= hydro_load_df.load .* (target_load_peak_hydro/maximum(hydro_load_df.load)) 
+
+
+    rename!(caiso_load_df, "Time" => "timestamp", "Day-ahead net forecast" => "load")
+    caiso_load_df = change_resolution(caiso_load_df, steps_per_hour)
+    thermal_load_df = DataFrame(
+        load = caiso_load_df.load,
+        timestep = 1:nrow(nyiso_load_df),
+        area = fill(1, nrow(caiso_load_df))
+    )
+    target_load_peak_thermal = 800
+    thermal_load_df.load .= thermal_load_df.load .* (target_load_peak_thermal/maximum(thermal_load_df.load)) 
+    wind_load_df = DataFrame(
+        load = fill(0, nrow(caiso_load_df)),
+        timestep = 1:nrow(nyiso_load_df),
+        area = fill(2, nrow(caiso_load_df))
+    )
+    load_df = vcat(thermal_load_df, wind_load_df, hydro_load_df)
+    load_df = generate_scenarios(load_df, :load, scenarios)
+    # display(load_df)
+    XLSX.writetable("output/load_data.xlsx", load_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+
+end
+
+function change_resolution(df::DataFrame, steps_per_hour::Int)
+    # Validate steps_per_hour
+    if !(steps_per_hour in [12, 4, 1])
+        throw(ArgumentError("steps_per_hour must be one of 12, 4, or 1"))
+    end
+
+    # Number of timesteps to average
+    group_size = 12 ÷ steps_per_hour
+
+    # Resample DataFrame by taking averages
+    grouped_df = DataFrame(
+        timestamp = [df.timestamp[1 + (i - 1) * group_size] for i in 1:(nrow(df) ÷ group_size)],
+        load = [mean(df.load[(1 + (i - 1) * group_size):(i * group_size)]) for i in 1:(nrow(df) ÷ group_size)],
+    )
+    return grouped_df 
 end
 
 function extend_ts(ts, n_steps)
@@ -192,20 +252,25 @@ function generate_scenarios(df::DataFrame, column_to_scale::Symbol, num_scenario
     
     # Create an empty DataFrame to store results
     results = copy(df)
-    results.scenario = fill(1, nrow(df))
+    results.scenario = fill(0, nrow(df))
 
     # Define the normal distribution for scaling
     dist = Normal(1.0, 0.1)
-    hard_coded_scaling = [0.99, 0.92, 1.02, 0.93, 0.98, 0.84, 1.01, 0.97, 1.04, 1.25]
+    hard_coded_scaling_wind = [0.99, 0.92, 1.02, 0.93, 0.98, 0.84, 1.01, 0.97, 1.04, 1.25]
+    hard_coded_scaling_load = [1.18, 0.82, 1.1, 0.97, 0.92, 1.04, 1.05, 1.1, 0.97, 0.87]
 
     # Generate scenarios
-    for scenario in 2:num_scenarios
+    for scenario in 1:num_scenarios
         # Create a copy of the DataFrame to keep other columns the same
         scenario_df = copy(df)
 
         # Scale the specified column
         # scaling_factor = rand(dist)
-        scaling_factor = hard_coded_scaling[scenario-1]
+        if string(column_to_scale) == "wind_power"
+            scaling_factor = hard_coded_scaling_wind[scenario]
+        elseif string(column_to_scale) == "load"
+            scaling_factor = hard_coded_scaling_load[scenario]
+        end
         scenario_df[!, column_to_scale] .= df[!, column_to_scale] .* scaling_factor
 
         # Add the scenario number column

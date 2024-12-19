@@ -3,66 +3,80 @@ using Statistics
 # include("C:/Users/vegardvk/vscodeProjects/bernstein/continuous_model.jl")
 
 
-function write_results(model)
-    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
-    sampling_points = 10
+function write_results(model, sampling_points, S_input=[])
+    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, prod_df, shedding_df, dumping_df, S = read_input_data()
+    if length(S_input)>=0
+        S = S_input
+    end
+    S = S[2:end]
+
+    # sampling_points = 10
     production = value.(model[:prod])
     uc = value.(model[:status])
     startup = value.(model[:startup])
     shedding = value.(model[:shedding])
     dumping = value.(model[:dumping])
     transmission = value.(model[:transmission])
+    println(1)
+    # discharge = value.(model[:flow_disch])
+    # spill = value.(model[:flow_spill])
+    # bypass = value.(model[:flow_bypass])
+    # total_inflow = value.(model[:total_flow_in])
+    # total_outflow = value.(model[:total_flow_out])
+    # volume_end = value.(model[:volume_end])
 
-    discharge = value.(model[:flow_disch])
-    spill = value.(model[:flow_spill])
-    bypass = value.(model[:flow_bypass])
-    total_inflow = value.(model[:total_flow_in])
-    total_outflow = value.(model[:total_flow_out])
-    volume_end = value.(model[:volume_end])
-    frequency = value.(model[:frequency])
-    frequency_d = value.(model[:frequency_d])
+    # frequency = value.(model[:frequency])
+    # frequency_d = value.(model[:frequency_d])
 
-    hydro_aggregated_df = get_aggregated_hydro_results(discharge, spill, bypass, total_inflow, total_outflow, volume_end, T, P_h)
-    hydro_weights_df = get_weight_hydro_result(discharge, spill, bypass, total_inflow, total_outflow, T, P_h, B)
-    hydro_expanded_df = get_expanded_hydro_results(discharge, spill, bypass, total_inflow, total_outflow, T, P_h, sampling_points)
+    # hydro_aggregated_df = get_aggregated_hydro_results(discharge, spill, bypass, total_inflow, total_outflow, volume_end, T, P_h)
+    # hydro_weights_df = get_weight_hydro_result(discharge, spill, bypass, total_inflow, total_outflow, T, P_h, B)
+    # hydro_expanded_df = get_expanded_hydro_results(discharge, spill, bypass, total_inflow, total_outflow, T, P_h, sampling_points)
     
-    CSV.write("continuous_results/hydro_results_expanded.csv", hydro_expanded_df)
-    CSV.write("continuous_results/hydro_results_aggregated.csv", hydro_aggregated_df)
+    # CSV.write("continuous_results/hydro_results_expanded.csv", hydro_expanded_df)
+    # CSV.write("continuous_results/hydro_results_aggregated.csv", hydro_aggregated_df)
     
-    production_weights_df = get_weight_prod_results(plant_df, production, T, P, B)
-    production_expanded_df = get_expanded_prod_results(plant_df, production, uc, startup, T, P, B, sampling_points)
-    production_aggregated_df = get_aggregated_prod_results(plant_df, production, uc, startup, T, P, B,)
+    production_weights_df = get_weight_prod_results(plant_df, production, T, P, B, S)
+    production_expanded_df = get_expanded_prod_results(plant_df, production, uc, startup, T, P, B, S, sampling_points)
+    production_aggregated_df = get_aggregated_prod_results(plant_df, production, uc, startup, T, P, B, S)
     CSV.write("continuous_results/production_expanded.csv", production_expanded_df)
     CSV.write("continuous_results/production_aggregated.csv", production_aggregated_df)
 
-    area_weights_df = get_weight_area_results(load_df, shedding, dumping, T, A, B)
-    area_expanded_df = get_expanded_area_results(load_df, shedding, dumping, A, T, sampling_points)
-    area_aggregated_df = get_aggregated_area_results(load_df, shedding, dumping, A, T)
-    CSV.write("continuous_results/area_results_expanded.csv", area_expanded_df)
-    CSV.write("continuous_results/area_results_aggregated.csv", area_aggregated_df)
+
+    # area_weights_df = get_weight_area_results(load_df, shedding, dumping, T, A, B)
+    # area_expanded_df = get_expanded_area_results(load_df, shedding, dumping, A, T, sampling_points)
+    # area_aggregated_df = get_aggregated_area_results(load_df, shedding, dumping, A, T)
+    # CSV.write("continuous_results/area_results_expanded.csv", area_expanded_df)
+    # CSV.write("continuous_results/area_results_aggregated.csv", area_aggregated_df)
 
     transmission_expanded_df = get_expanded_transmission_results(line_df, transmission, T, L, sampling_points)
     transmission_aggregated_df = get_aggregated_transmission_results(line_df, transmission, T, L)
     CSV.write("continuous_results/transmission_results_expanded.csv", transmission_expanded_df)
     CSV.write("continuous_results/transmission_results_aggregated.csv", transmission_aggregated_df)
+    println(2)
 
-    frequency_expanded_df = get_expanded_frequency_result(sampling_points, frequency, frequency_d, T)
-    CSV.write("continuous_results/frequency.csv", frequency_expanded_df)
+    # frequency_expanded_df = get_expanded_frequency_result(sampling_points, frequency, frequency_d, T)
+    # CSV.write("continuous_results/frequency.csv", frequency_expanded_df)
 
     XLSX.writetable("continuous_results/results_expanded.xlsx", 
                     "production" => production_expanded_df,
-                    "area_results" => area_expanded_df,
-                    "hydro_results" => hydro_expanded_df,
+                    # "area_results" => area_expanded_df,
+                    # "hydro_results" => hydro_expanded_df,
                     "transmission" => transmission_expanded_df, overwrite=true)
+    println(3)
+
     XLSX.writetable("continuous_results/results_aggregated.xlsx", 
                     "production" => production_aggregated_df,
-                    "area_results" => area_aggregated_df,
-                    "hydro_results" => hydro_aggregated_df,
+                    # "area_results" => area_aggregated_df,
+                    # "hydro_results" => hydro_aggregated_df,
                     "transmission" => transmission_aggregated_df, overwrite=true)
+    println(4)
+
     XLSX.writetable("continuous_results/result_weights.xlsx", 
                     "production" => production_weights_df, 
-                    "area_results" => area_weights_df, 
-                    "hydro_results" => hydro_weights_df, overwrite=true)
+                    # "area_results" => area_weights_df, 
+                    # "hydro_results" => hydro_weights_df,
+                    overwrite=true)
+    println(5)
 
 end
 
@@ -162,16 +176,18 @@ function get_expanded_hydro_results(discharge, spill, bypass, total_inflow, tota
     return hydro_df
 end
 
-function get_weight_prod_results(plant_df, production_results, T, P, B)
-    production_weights_df = DataFrame(id=Int[], areas_fk=Int[], plant_id=Int[], timestep=Int[], b=Int[], area=Int[], fuel_type=String[], production=Float64[])
+function get_weight_prod_results(plant_df, production_results, T, P, B, S)
+    production_weights_df = DataFrame(id=Int[], areas_fk=Int[], plant_id=Int[], timestep=Int[], b=Int[], scenario=Int[], area=Int[], fuel_type=String[], production=Float64[])
     id_counter = 1
     areas_fk = 1
     for t in T
         for p in P
             for b in B
-                row = (id_counter, areas_fk, p, t, b, plant_df[plant_df.plant_id .== p, :area][1], plant_df[plant_df.plant_id .== p, :fuel_type][1], round(production_results[p, b, t], digits=2))
-                push!(production_weights_df, row)
-                id_counter += 1
+                for s in S
+                    row = (id_counter, areas_fk, p, t, b, s, plant_df[plant_df.plant_id .== p, :area][1], plant_df[plant_df.plant_id .== p, :fuel_type][1], round(production_results[s, p, b, t], digits=2))
+                    push!(production_weights_df, row)
+                    id_counter += 1
+                end
             end
         end
         areas_fk += 1
@@ -180,39 +196,43 @@ function get_weight_prod_results(plant_df, production_results, T, P, B)
     return production_weights_df
 end
 
-function get_expanded_prod_results(plant_df, production_results, uc, startup, T, P, B, sampling_points)
-    prod_df = DataFrame(id=Int[], plant_id=Int[], timestep=Int[], timestep_fractional=Float64[], production=Float64[], area=Int[], fuel_type=String[], status=Int[], startup=Int[])
+function get_expanded_prod_results(plant_df, production_results, uc, startup, T, P, B, S, sampling_points)
+    prod_df = DataFrame(id=Int[], plant_id=Int[], scenario=Int[], timestep=Int[], timestep_fractional=Float64[], production=Float64[], area=Int[], fuel_type=String[], status=Int[], startup=Int[])
     # prod_df = DataFrame(id=Int[], plant_id=Int[], timestep=Int[], area=Int[], fuel_type=String[], production=Float64[], status=Int[], startup=Int[])
     id_counter=1
     n_elements = T[end]*sampling_points + 1
     for p in P
-        weights = production_results[p, :, :]
-        weights_df = DataFrame(Array(weights), :auto)
-        # weights_df = dense_array_to_df(weights)
-        prod_array = get_converted_list(weights_df, sampling_points)
-        plant_prod_df = DataFrame(id=id_counter:(id_counter+n_elements-1),
-                             plant_id=fill(p, n_elements),
-                             timestep = vcat([1], [t  for t in T for s in 1:sampling_points]),
-                             timestep_fractional=0:(1/sampling_points):T[end], 
-                             production=prod_array,
-                             area=fill(plant_df[plant_df.plant_id .== p, :area][1], n_elements),
-                             fuel_type=fill(plant_df[plant_df.plant_id .== p, :fuel_type][1], n_elements),
-                             status=vcat([round(uc[p, 1])], [round(uc[p, t]) for t in T for s in 1:sampling_points]),
-                             startup=vcat([round(startup[p, 1])], [round(startup[p, t]) for t in T for s in 1:sampling_points]))
-        append!(prod_df, plant_prod_df)
-        id_counter += n_elements
+        for s in S
+            weights = production_results[s, p, :, :]
+            weights_df = DataFrame(Array(weights), :auto)
+            # weights_df = dense_array_to_df(weights)
+            prod_array = get_converted_list(weights_df, sampling_points)
+            plant_prod_df = DataFrame(id=id_counter:(id_counter+n_elements-1),
+                                plant_id=fill(p, n_elements),
+                                scenario=fill(s, n_elements),
+                                timestep = vcat([1], [t  for t in T for s in 1:sampling_points]),
+                                timestep_fractional=0:(1/sampling_points):T[end], 
+                                production=prod_array,
+                                area=fill(plant_df[plant_df.plant_id .== p, :area][1], n_elements),
+                                fuel_type=fill(plant_df[plant_df.plant_id .== p, :fuel_type][1], n_elements),
+                                status=vcat([round(uc[p, 1])], [round(uc[p, t]) for t in T for s in 1:sampling_points]),
+                                startup=vcat([round(startup[p, 1])], [round(startup[p, t]) for t in T for s in 1:sampling_points]))
+            append!(prod_df, plant_prod_df)
+            id_counter += n_elements
+        end
     end
     return prod_df
 end
 
-function get_aggregated_prod_results(plant_df, production_results, uc, startup, T, P, B,)
-    expanded_df = get_expanded_prod_results(plant_df, production_results, uc, startup, T, P, B, 10000)
+function get_aggregated_prod_results(plant_df, production_results, uc, startup, T, P, B, S)
+    expanded_df = get_expanded_prod_results(plant_df, production_results, uc, startup, T, P, B, S, 10000)
     df_avg = combine(groupby(expanded_df, [:timestep, :plant_id]), 
                     :production => mean => :production,
                     :area => first => :area,
                     :fuel_type => first => :fuel_type,
                     :status => first => :status,
-                    :startup => first => :startup)
+                    :startup => first => :startup,
+                    :scenario => first => :scenario)
     # new_array =  [volume_end[p, t] for t in T for p in P_h]
     # df_avg.volume_res = [volume_end[p, t] for t in T for p in P_h]
     return df_avg

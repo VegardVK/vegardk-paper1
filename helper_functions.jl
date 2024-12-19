@@ -25,7 +25,7 @@ function plot_all_columns_df(df, title="", filename="", y_lim=false)
     end
     display(a)
     if filename != ""
-        savefig(a, "C:/Users/vegardvk/PycharmProjects/Bernstein/results/$filename")
+        savefig(a, "C:/Users/vegardvk/vscodeProjects/Bernstein/results/$filename")
     end
 end
 
