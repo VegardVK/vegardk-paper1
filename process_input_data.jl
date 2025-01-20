@@ -11,7 +11,7 @@ include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
 
 
 
-function process_plant_data(steps_per_hour)
+function process_plant_data(steps_per_hour, scenarios)
     input_df = CSV.read("input/gen.csv", DataFrame)
     input_df[!, :gen_index] = 1:nrow(input_df)
 
@@ -39,7 +39,7 @@ function process_plant_data(steps_per_hour)
         end
     end
 
-    hydro_df = process_hydro_data(steps_per_hour)
+    hydro_df = process_hydro_data(steps_per_hour, scenarios)
     for hydro_row in eachrow(hydro_df)
         output_row = (hydro_row["plant_id"], 3, hydro_row["kap_gen_mw"], 0, "Hydro", hydro_row["fuel_price"])
         push!(output_df, output_row)
@@ -72,7 +72,9 @@ function process_wind_ts_data(steps_per_hour, scenarios)
 
     end
     target_peak_wind = 200
-    multiplier = (target_peak_wind/maximum(df.wind_power)) 
+    grouped_df = groupby(df, :timestep)
+    group_sums = combine(grouped_df, :wind_power => sum => :total_wind)
+    multiplier = (target_peak_wind/maximum(group_sums.total_wind)) 
     df.wind_power .= df.wind_power .* multiplier 
     df = generate_scenarios(df, :wind_power, scenarios)
 
@@ -88,7 +90,7 @@ function get_wind_ts(year=2020, month=1, day=1)
     return filtered_df 
 end
 
-function process_hydro_data(steps_per_hour)
+function process_hydro_data(steps_per_hour, scenarios)
     file_path = "C:/Users/vegardvk/vscodeProjects/bernstein/Input/moduldata.xlsx"
     # xf = XLSX.readxlsx(file_path)
     # sh = xf["Sheet1"]
@@ -106,11 +108,11 @@ function process_hydro_data(steps_per_hour)
     I_disch, I_spill, I_bypass = find_connected_plants(df)
 
     end_reservoir = 49900
-    energy_price = 10
+    energy_price = get_water_value()
     df[!, "fuel_price"] .= 0.0
     set_wv!(I_disch, df, end_reservoir, energy_price)
     add_start_reservoir!(df)
-    write_inflow_table(df, 24 * steps_per_hour)
+    write_inflow_table(df, 24 * steps_per_hour, scenarios)
     XLSX.writetable("output/hydro_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
     return df
 end
@@ -150,31 +152,36 @@ end
 function process_load_data(steps_per_hour, scenarios)
     caiso_load_df = CSV.read("input/CAISO load data/CAISO-netdemand-20190101.csv", DataFrame)
     nyiso_load_df = CSV.read("input/NYISO load data/20190101pal.csv", DataFrame, delim=",")
+    target_load_peak_hydro = 610
+    target_load_peak_thermal = 680
 
     rename!(nyiso_load_df, "Time Stamp" => "timestamp", "Load" => "load")
     nyiso_load_df.timestamp = map(String, nyiso_load_df.timestamp)
     nyiso_load_df.timestamp = DateTime.(nyiso_load_df.timestamp, dateformat"dd/mm/yyyy HH:MM:SS")
     filter!(row -> second(row.timestamp) == 0, nyiso_load_df)
-    nyiso_load_df = nyiso_load_df[nyiso_load_df.Name .== "HUD VL", ["timestamp", "load"]]    
+    nyiso_load_df = nyiso_load_df[nyiso_load_df.Name .== "HUD VL", ["timestamp", "load"]]
+    nyiso_load_df.load .= nyiso_load_df.load .* (target_load_peak_hydro/maximum(nyiso_load_df.load))
     nyiso_load_df = change_resolution(nyiso_load_df, steps_per_hour)
     hydro_load_df = DataFrame(
         load = nyiso_load_df.load,
         area = fill(3, nrow(nyiso_load_df)),
         timestep = 1:nrow(nyiso_load_df)
     )
-    target_load_peak_hydro = 680
-    hydro_load_df.load .= hydro_load_df.load .* (target_load_peak_hydro/maximum(hydro_load_df.load)) 
+    
+    # hydro_load_df.load .= hydro_load_df.load .* (target_load_peak_hydro/maximum(hydro_load_df.load)) 
 
 
     rename!(caiso_load_df, "Time" => "timestamp", "Day-ahead net forecast" => "load")
+    caiso_load_df.load .= caiso_load_df.load .* (target_load_peak_thermal/maximum(caiso_load_df.load))
+
     caiso_load_df = change_resolution(caiso_load_df, steps_per_hour)
     thermal_load_df = DataFrame(
         load = caiso_load_df.load,
         timestep = 1:nrow(nyiso_load_df),
         area = fill(1, nrow(caiso_load_df))
     )
-    target_load_peak_thermal = 800
-    thermal_load_df.load .= thermal_load_df.load .* (target_load_peak_thermal/maximum(thermal_load_df.load)) 
+    # thermal_load_df.load .= thermal_load_df.load .* (target_load_peak_thermal/maximum(thermal_load_df.load)) 
+    
     wind_load_df = DataFrame(
         load = fill(0, nrow(caiso_load_df)),
         timestep = 1:nrow(nyiso_load_df),

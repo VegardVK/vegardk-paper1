@@ -68,5 +68,11 @@ function get_cost_parameters()
     C_shedding = 1000
     C_dumping = 50
     C_startup = 100
-    return C_shedding, C_dumping, C_startup
+    C_spill = 100
+    C_bypass = 100
+    return C_shedding, C_dumping, C_startup, C_spill, C_bypass
+end
+
+function get_water_value()
+    return 10
 end

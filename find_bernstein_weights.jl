@@ -39,7 +39,8 @@ function find_bernstein_weights(target_ts, bernstein_degree, timesteps, val_name
     model = Model()
     # set_optimizer(model, Ipopt.Optimizer)
     set_optimizer(model, CPLEX.Optimizer)
-    
+    set_optimizer_attribute(model, "CPXPARAM_ScreenOutput", 0)
+
     @variable(model, weights[b in B, t in T] ≥ 0)
     @variable(model, deviation[s in S, t in T])
     @constraint(model, deviation_summation[s in S, t in T], deviation[s, t] == sum(bernstein_curves[b, s] * weights[b, t] for b in B) - target_ts[(t-1)*measuring_points_timestep + s+1])
@@ -69,27 +70,37 @@ function find_bernstein_weights(target_ts, bernstein_degree, timesteps, val_name
 end
 
 
-function find_bounds_weights(lb_target, ub_target, bernstein_degree, timesteps, output_type, val_name="weights", measuring_points_hour=3600, cont_constraints=true)
+function find_bounds_weights(lb_target, ub_target, prod_ref, max_prod, bernstein_degree, timesteps, measuring_points_hour=3600, cont_constraints=true)
     T = 1:timesteps
     B = 0:bernstein_degree
     timesteps_per_hour = div(timesteps, 24)
     measuring_points_timestep = div(measuring_points_hour, timesteps_per_hour)
     S = 0:measuring_points_timestep
-    type = 1:2
+    type = 1:3 #1 = lb, 2 = ub, 3 = prod_ref
     lb_target = change_ts_resolution_to_second(lb_target, measuring_points_hour)
     ub_target = change_ts_resolution_to_second(ub_target, measuring_points_hour)
-
+    prod_ref = change_ts_resolution_to_second(prod_ref, measuring_points_hour)
     bernstein_curves =Dict((b, s) => get_bernstein_val(bernstein_degree, b, s/measuring_points_timestep) for s in S for b in B)
     model = Model()
     # set_optimizer(model, Ipopt.Optimizer)
     set_optimizer(model, CPLEX.Optimizer)
+    set_optimizer_attribute(model, "CPXPARAM_ScreenOutput", 0)
+
     @variable(model, weights[b in B, t in T, i in type] >= 0)
     @variable(model, deviation[s in S, t in T, i in type])
 
     @constraint(model, deviation_summation_lb[s in S, t in T], deviation[s, t, 1] == sum(bernstein_curves[b, s] * weights[b, t, 1] for b in B) - lb_target[(t-1)*measuring_points_timestep + s+1])
     @constraint(model, deviation_summation_ub[s in S, t in T], deviation[s, t, 2] == sum(bernstein_curves[b, s] * weights[b, t, 2] for b in B) - ub_target[(t-1)*measuring_points_timestep + s+1]) 
-    @constraint(model, ub_over_lb[b in B, t in T],weights[b, t, 2] >= weights[b, t, 1])
-
+    @constraint(model, deviation_summation_prod_ref[s in S, t in T], deviation[s, t, 3] == sum(bernstein_curves[b, s] * weights[b, t, 3] for b in B) - prod_ref[(t-1)*measuring_points_timestep + s + 1])
+    
+    @constraint(model, ub_over_prod_ref[b in B, t in T],weights[b, t, 2] ≥ weights[b, t, 3])
+    @constraint(model, prod_ref_over_lb[b in B, t in T], weights[b, t, 3] ≥ weights[b, t, 1])
+    ϵ = 0.01
+    if max_prod ≥ ϵ
+        @constraint(model, ub_under_max_prod[b in B, t in T], weights[b, t, 2] ≤ max_prod - ϵ)
+    else
+        @constraint(model, ub_under_max_prod[b in B, t in T], weights[b, t, 2] ≤ max_prod)
+    end
     if cont_constraints
         @constraint(model, continuity_constraint1[t in T[1:end-1], i in type], weights[bernstein_degree, t, i] == weights[0, t+1, i])
         @constraint(model, continuity_constraint2[t in T[1:end-1], i in type], weights[bernstein_degree, t, i] - weights[bernstein_degree-1, t, i] == weights[1, t+1, i] - weights[0, t+1, i])
@@ -103,10 +114,22 @@ function find_bounds_weights(lb_target, ub_target, bernstein_degree, timesteps, 
     optimize!(model)
 
     weights = value.(weights)
-    df = dense_array_to_df(weights[:, :, output_type])
-    df = convert_weights_to_long_format(df, val_name)
+    ub_df = dense_array_to_df(weights[:, :, 2])
+    ub_df = convert_weights_to_long_format(ub_df, "ub")
 
-    return df
+    lb_df = dense_array_to_df(weights[:, :, 1])
+    lb_df = convert_weights_to_long_format(lb_df, "lb")
+    ub_df.lb = lb_df.lb
+
+    prod_ref_df = dense_array_to_df(weights[:, :, 3])
+    prod_ref_df = convert_weights_to_long_format(prod_ref_df, "production")
+    ub_df.production = prod_ref_df.production
+    # println(df)
+
+    # df[!, val_name] .= floor.(df[!, val_name], digits=2)
+    # println(df)
+    a = 3
+    return ub_df
 end
 
 
@@ -143,17 +166,25 @@ function convert_df_from_weights_to_values(input_df, column_list, sampling_point
     return output_df
 end
 
-function get_converted_list(weights_df, sampling_points)
+function get_converted_list(weights_df, sampling_points, include_first=true)
     bernstein_degree = length(weights_df[:,1])-1
     time_steps = length(weights_df[1, :])
     converted_list = zeros(time_steps * sampling_points+1)
 
     for b in 0:bernstein_degree
-        converted_list[1] += get_bernstein_val(bernstein_degree, b, 0) * weights_df[b+1, 1]        
+        if include_first
+            converted_list[1] += get_bernstein_val(bernstein_degree, b, 0) * weights_df[b+1, 1]        
+        else
+            converted_list[end] += get_bernstein_val(bernstein_degree, b, 1) * weights_df[b+1, time_steps]   
+        end
         for t in 1:time_steps
             for s in 1:sampling_points
                 # println((t-1)*sampling_points+s+1)
-                converted_list[(t-1)*sampling_points+s+1] += get_bernstein_val(bernstein_degree, b, s/sampling_points) * weights_df[b+1, t]
+                if include_first
+                    converted_list[(t-1)*sampling_points+s+1] += get_bernstein_val(bernstein_degree, b, s/sampling_points) * weights_df[b+1, t]
+                else
+                    converted_list[(t-1)*sampling_points+s] += get_bernstein_val(bernstein_degree, b, (s-1)/sampling_points) * weights_df[b+1, t]
+                end
             end
         end
     end
@@ -163,6 +194,7 @@ end
 
 function find_and_write_production_weights(bernstein_degree, column_symbols,  cont_constraints, timesteps, measuring_points, P=[], S=[])
     df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "production", infer_eltypes=true))
+    plant_data_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
     output_df = DataFrame()
     if length(P) == 0
         P = unique(df.plant_id)
@@ -172,25 +204,26 @@ function find_and_write_production_weights(bernstein_degree, column_symbols,  co
     end
 
     for p in P
+        ub = plant_data_df[plant_data_df.plant_id .== p, "gen_ub"][1]
+        lb_target = df[(df.plant_id .== p) .& (df.scenario .== 0), :lb]
+        ub_target = df[(df.plant_id .== p) .& (df.scenario .== 0), :ub]
+        prod_ref = df[(df.plant_id .== p) .& (df.scenario .== 0), :production]
+
+        weights_df = find_bounds_weights(lb_target, ub_target, prod_ref, ub, bernstein_degree, timesteps, measuring_points, cont_constraints)
+
         for s in S
-            first = true
             temp_df = DataFrame(plant_id = repeat([p], timesteps*(bernstein_degree+1)), scenario=repeat([s], timesteps*(bernstein_degree+1)),
                                 b = repeat(0:bernstein_degree, timesteps), timestep = repeat(1:timesteps, inner=[bernstein_degree+1]))
-            for column_symbol in column_symbols
-                value_array = df[(df.plant_id .== p) .& (df.scenario .== s), column_symbol]
-                lb_target =  value_array = df[(df.plant_id .== p) .& (df.scenario .== s), :lb]
-                ub_target =  value_array = df[(df.plant_id .== p) .& (df.scenario .== s), :ub]
 
-                if string(column_symbol) == "ub"
-                    weights_df = find_bounds_weights(lb_target, ub_target, bernstein_degree, timesteps, 2, string(column_symbol), measuring_points, cont_constraints)
-                elseif string(column_symbol) == "lb"
-                    weights_df = find_bounds_weights(lb_target, ub_target, bernstein_degree, timesteps, 1, string(column_symbol), measuring_points, cont_constraints)
-                else
-                    weights_df = find_bernstein_weights(value_array, bernstein_degree, timesteps, string(column_symbol), measuring_points, cont_constraints)
-                end
-                weights_df[!, column_symbol] = round.(weights_df[!, column_symbol], digits=2)
-                temp_df[!, column_symbol] = weights_df[!, column_symbol]
-            end
+            println("Finding bounds for power plant $p in scenario $s")
+            temp_df[!, :ub] = weights_df[!, :ub]
+            temp_df[:, :lb] = weights_df[!, :lb]
+            temp_df[:, :production] = weights_df[!, :production]
+            # if Symbol("production") in column_symbols
+            #     prod_array = df[(df.plant_id .== p) .& (df.scenario .== s), :production]
+            #     weights_df = find_bernstein_weights(prod_array, bernstein_degree, timesteps, "production", measuring_points, cont_constraints)
+            #     temp_df[!, :production] = weights_df[!, :production]
+            # end
             output_df = vcat(output_df, temp_df)
         end
     end
@@ -200,21 +233,23 @@ end
 
 function convert_production_weights_to_values(column_list, sampling_points=60)
     input_df = DataFrame(XLSX.readtable("output/production_weights.xlsx", "Sheet1", infer_eltypes=true))
-    display(input_df)
+    # display(input_df)
     P = unique(input_df.plant_id)
     S = unique(input_df.scenario)
     T = unique(input_df.timestep)
     output_df = DataFrame()
+    sp_ts_input = div(sampling_points, div(T[end], 24))
     for p in P
         for s in S
-            temp_df = convert_df_from_weights_to_values(input_df[(input_df.plant_id .== p) .& (input_df.scenario .== s), :], column_list, sampling_points) 
+            temp_df = convert_df_from_weights_to_values(input_df[(input_df.plant_id .== p) .& (input_df.scenario .== s), :], column_list, sp_ts_input) 
             temp_df.plant_id .= p
             temp_df.scenario .= s
-            temp_df.timestep = vcat([1], [t  for t in T for s in 1:sampling_points])
-            temp_df.timestep_fractional=0:(1/sampling_points):T[end]
+            temp_df.timestep = vcat([1], [t  for t in 1:24 for s in 1:sampling_points])
+            temp_df.timestep_fractional=0:(1/sampling_points):24
             append!(output_df, temp_df)
         end
     end
+    output_df.timestep_fractional .= round.(output_df.timestep_fractional, digits=4)
     XLSX.writetable("output/ub_and_lb.xlsx", output_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 end
 
@@ -300,22 +335,50 @@ function find_and_write_wind_weights(bernstein_degree)
 end
 
 
-function find_and_write_inflow_weights(bernstein_degree)
+function find_and_write_inflow_weights(bernstein_degree, timesteps, sampling_points)
     inflow_df = DataFrame(XLSX.readtable("output/inflow_data.xlsx", "Sheet1", infer_eltypes=true))
     weights_df = DataFrame()
     P = unique(inflow_df.plant_id)
     for p in P
         plant_inflow_ts = inflow_df[inflow_df.plant_id .== p, :inflow]
-        parameters = define_parameters(plant_inflow_ts, bernstein_degree, 100)
-        df = define_problem(parameters)
-        df.b = 0:bernstein_degree
-        df_long = stack(df, Not(:b), variable_name="timestep", value_name="inflow")
-        df_long.timestep = parse.(Int, df_long.timestep)
-        df_long.plant_id .= p
-        weights_df = vcat(weights_df, df_long)
+        df = find_bernstein_weights(plant_inflow_ts, bernstein_degree, timesteps, "inflow", sampling_points)
+        df.plant_id .= p
+        weights_df = vcat(weights_df, df)
     end
     weights_df.inflow = round.(weights_df.inflow, digits=2)
+    display(weights_df)
     XLSX.writetable("output/inflow_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+end
+
+function prepare_parameter_weights(nB, nT, nS)
+    # find_and_write_parameter_weights(nB, nT, nS, "output/inflow_data.xlsx", :inflow, :plant_id)
+    # find_and_write_parameter_weights(nB, nT, nS, "output/wind_ts_data.xlsx", :wind_power, :plant_id)
+    find_and_write_parameter_weights(nB, nT, nS, "output/original_load_expanded.xlsx", :load, :area)
+end
+
+function find_and_write_parameter_weights(nB, nT, nS, input_file, val_col, idx_col)
+    input_df = DataFrame(XLSX.readtable(input_file, "Sheet1", infer_eltypes=true))
+    if val_col == Symbol("load")
+        display(input_df)
+    end
+    weights_df = DataFrame()
+    idx_set = unique(input_df[:, idx_col])
+    # display(input_df)
+    S = unique(input_df.scenario)
+    for i in idx_set
+        for s in S
+            input_ts = input_df[(input_df[:, idx_col] .== i) .& (input_df[:, :scenario] .== s), val_col]
+            df = find_bernstein_weights(input_ts, nB, nT, string(val_col), nS)
+            df[:, idx_col] .= i
+            df.scenario .= s
+            weights_df = vcat(weights_df, df)
+        end
+    end
+    weights_df[:, val_col] = round.(weights_df[:, val_col], digits=2)
+    println("Writing weights for $val_col")
+    # display(weights_df)
+    output_filename = "output/" * string(val_col) * "_weights.xlsx"
+    XLSX.writetable(output_filename, weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 end
 
 

@@ -1,16 +1,100 @@
-component,values,area
-Fuel,12518.529999999999,1
-Shedding,0.0,1
-Dumping,0.0,1
-Water,0.0,1
-Start,400.0,1
-Fuel,0.0,2
-Shedding,0.0,2
-Dumping,3927.5,2
-Water,0.0,2
-Start,0.0,2
-Fuel,0.0,3
-Shedding,0.0,3
-Dumping,0.0,3
-Water,16359.2,3
-Start,0.0,3
+component,values,area,scenario
+Day-ahead costs,17058.58,1,1
+up-activation cost,567.01,1,1
+down-activation cost,-118.27,1,1
+Shedding,10246.67,1,1
+Dumping,0.0,1,1
+Water,0.0,1,1
+Bypass cost,0.0,1,1
+Spill cost,0.0,1,1
+Day-ahead costs,17058.58,1,2
+up-activation cost,31.32,1,2
+down-activation cost,-3697.2899999999995,1,2
+Shedding,0.0,1,2
+Dumping,0.0,1,2
+Water,0.0,1,2
+Bypass cost,0.0,1,2
+Spill cost,0.0,1,2
+Day-ahead costs,17058.58,1,3
+up-activation cost,308.73,1,3
+down-activation cost,-935.3,1,3
+Shedding,0.0,1,3
+Dumping,0.0,1,3
+Water,0.0,1,3
+Bypass cost,0.0,1,3
+Spill cost,0.0,1,3
+Day-ahead costs,0.0,2,1
+up-activation cost,0.0,2,1
+down-activation cost,0.0,2,1
+Shedding,0.0,2,1
+Dumping,0.0,2,1
+Water,0.0,2,1
+Bypass cost,0.0,2,1
+Spill cost,0.0,2,1
+Day-ahead costs,0.0,2,2
+up-activation cost,0.0,2,2
+down-activation cost,0.0,2,2
+Shedding,0.0,2,2
+Dumping,0.0,2,2
+Water,0.0,2,2
+Bypass cost,0.0,2,2
+Spill cost,0.0,2,2
+Day-ahead costs,0.0,2,3
+up-activation cost,0.0,2,3
+down-activation cost,0.0,2,3
+Shedding,0.0,2,3
+Dumping,0.0,2,3
+Water,0.0,2,3
+Bypass cost,0.0,2,3
+Spill cost,0.0,2,3
+Day-ahead costs,11391.710000000001,3,1
+up-activation cost,8862.07,3,1
+down-activation cost,-204.14000000000001,3,1
+Shedding,68554.67,3,1
+Dumping,0.0,3,1
+Water,20049.9,3,1
+Bypass cost,0.0,3,1
+Spill cost,7.800000000000001,3,1
+Day-ahead costs,11391.710000000001,3,2
+up-activation cost,5.95,3,2
+down-activation cost,-6161.26,3,2
+Shedding,0.0,3,2
+Dumping,0.0,3,2
+Water,5236.34,3,2
+Bypass cost,0.0,3,2
+Spill cost,0.0,3,2
+Day-ahead costs,11391.710000000001,3,3
+up-activation cost,6606.16,3,3
+down-activation cost,-2146.2700000000004,3,3
+Shedding,44.0,3,3
+Dumping,0.0,3,3
+Water,15851.61,3,3
+Bypass cost,0.0,3,3
+Spill cost,0.0,3,3
+Start,300.0,1,1
+Start,0.0,2,1
+Start,0.0,3,1
+Start,300.0,1,2
+Start,0.0,2,2
+Start,0.0,3,2
+Start,300.0,1,3
+Start,0.0,2,3
+Start,0.0,3,3
+Up-reserve,186.23999216000004,1,1
+Up-reserve,0.0,2,1
+Up-reserve,3282.3252000000007,3,1
+Up-reserve,186.23999216000004,1,2
+Up-reserve,0.0,2,2
+Up-reserve,3282.3252000000007,3,2
+Up-reserve,186.23999216000004,1,3
+Up-reserve,0.0,2,3
+Up-reserve,3282.3252000000007,3,3
+Down-reserve,1196.3710328800003,1,1
+Down-reserve,0.0,2,1
+Down-reserve,2418.279408000001,3,1
+Down-reserve,1196.3710328800003,1,2
+Down-reserve,0.0,2,2
+Down-reserve,2418.279408000001,3,2
+Down-reserve,1196.3710328800003,1,3
+Down-reserve,0.0,2,3
+Down-reserve,2418.279408000001,3,3

@@ -38,15 +38,15 @@ function read_input_data()
 
     I_disch, I_spill, I_bypass = find_connected_plants(hydro_df)
 
-    C_shedding, C_dumping, C_startup = get_cost_parameters()
-    return wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, S, L_P, line_pairs
+    C_shedding, C_dumping, C_startup, C_spill, C_bypass = get_cost_parameters()
+    return wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, C_spill, C_bypass, S, L_P, line_pairs
 end
 
 
 function define_and_solve_model()
-    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, S, L_P, line_pairs = read_input_data()
+    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, C_spill, C_bypass, S, L_P, line_pairs = read_input_data()
     Δt = 24/T[end]
-    scenario_prob = 1/S[end]
+    π = 1/S[end]
 
     # display(load_df)
     model = Model()
@@ -54,6 +54,16 @@ function define_and_solve_model()
     @variable(model, production[s in S, p in P, t in T] >= 0)
     @variable(model, up_reserve[p in P, t in T] >= 0)
     @variable(model, down_reserve[p in P, t in T] >= 0)
+
+    @variable(model, up_activation[s in S, p in P, t in T] >= 0)
+    @variable(model, down_activation[s in S, p in P, t in T] >= 0)
+    @constraint(model, min_up_reserve[s in S, p in P, t in T], up_reserve[p, t] ≥ up_activation[s, p, t])
+    @constraint(model, min_down_reserve[s in S, p in P, t in T], down_reserve[p, t] ≥ down_activation[s, p, t])
+
+    buffer_balancing_capacity = 0
+    @constraint(model, area_up_reserve[s in S, t in T, a in A], sum(up_reserve[p, t] for p in P_a[a]) ≥ buffer_balancing_capacity + sum(up_activation[s, p, t] for p in P_a[a]))
+    @constraint(model, area_down_reserve[s in S, t in T, a in A], sum(down_reserve[p, t] for p in P_a[a]) ≥ buffer_balancing_capacity + sum(down_activation[s, p , t] for p in P_a[a]))
+
     # @variable(model, rt_prod[s in S[2:end], p, in P, t in T] >= 0)
     @variable(model, 0 ≤ load_shedding[s in S, a in A, t in T] ≤ load_df[(load_df.area .== a) .& (load_df.timestep .== t) .& (load_df.scenario .== s), :load][1])
     @variable(model, power_dumping[S in S, a in A, t in T] ≥ 0) 
@@ -72,14 +82,14 @@ function define_and_solve_model()
     # Production constraints thermal and wind
     @constraint(model, gen_ub[p in union(P_t, P_h), t in T], production[0, p, t] + up_reserve[p, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
     @constraint(model, gen_lb[p in union(P_t, P_h), t in T], production[0, p, t] - down_reserve[p, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
-    @constraint(model, wind_reserve_ub[p in P_w, t in T], up_reserve[p, t] <= 0)
-    @constraint(model, wind_reserve_lb[p in P_w, t in T], down_reserve[p, t] <= 0)
+    # @constraint(model, wind_reserve_ub[p in P_w, t in T], up_reserve[p, t] <= 0)
+    # @constraint(model, wind_reserve_lb[p in P_w, t in T], down_reserve[p, t] <= 0)
     @constraint(model, gen_on_off[p in union(P_t, P_h), t in T[2:end]], startup[p, t] ≥ status[p, t] - status[p, t-1])
     @constraint(model, wind_prod[p in P_w, t in T], production[0, p, t] <= wind_df[(wind_df.plant_id .== p) .& (wind_df.timestep .== t) .& (wind_df.scenario .== 0), :wind_power][1])  
 
     #second stage production constraints
-    @constraint(model, second_stage_gen_ub[s in S[2:end], p in union(P_t, P_h), t in T], production[s, p, t] <= production[0, p, t] + up_reserve[p, t])
-    @constraint(model, second_stage_gen_lb[s in S[2:end], p in union(P_t, P_h), t in T], production[s, p, t] >= production[0, p, t] - down_reserve[p, t])
+    @constraint(model, second_stage_gen_ub[s in S[2:end], p in union(P_t, P_h), t in T], production[s, p, t] == production[0, p, t] + up_activation[s, p, t] - down_activation[s, p, t])
+    # @constraint(model, second_stage_gen_lb[s in S[2:end], p in union(P_t, P_h), t in T], production[s, p, t] == production[0, p, t] - down_activation[s, p, t])
     @constraint(model, second_stage_wind[s in S[2:end], p in P_w, t in T], production[s, p, t] <= wind_df[(wind_df.plant_id .== p) .& (wind_df.timestep .== t) .& (wind_df.scenario .== s), :wind_power][1])
 
     #Hydropower variables
@@ -123,14 +133,18 @@ function define_and_solve_model()
                 + sum(transmission[s, l, t] * 0.99 for l in L_in[a])
                 - sum(transmission[s, l, t] for l in L_out[a])
                 == load_df[(load_df.area .== a) .& (load_df.timestep .== t) .& (load_df.scenario .== s), :load][1])
+    
     @objective(model, Min, 
-                    scenario_prob * Δt * sum(production[s, p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T for s in S)
-                    + 0.1 * Δt * sum(up_reserve[p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in union(P_t, P_h) for t in T)
-                    + 0.1 * Δt * sum(down_reserve[p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in union(P_t, P_h) for t in T)
-                    + scenario_prob * Δt * sum(load_shedding[s, a, t] * C_shedding for a in A for t in T for s in S) 
-                    + scenario_prob * Δt * sum(power_dumping[s, a, t] * C_dumping for a in A for t in T for s in S)
-                    + scenario_prob * sum((-volume[s, p, T[end]] + volume[0, p, 0]) * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_h for s in S)
-                    + sum(startup[p, t] * C_startup for p in P_t for t in T))
+        π * Δt * sum(production[s, p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T for s in S[2:end])
+        # + π * Δt * sum(up_activation[s, p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T for s in S[2:end])
+        # - π * Δt * sum(down_activation[s, p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T for s in S[2:end])
+        + 0.1 * Δt * sum(up_reserve[p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in union(P_t, P_h) for t in T)
+        + 0.1 * Δt * sum(down_reserve[p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in union(P_t, P_h) for t in T)
+        + π * Δt * sum(load_shedding[s, a, t] * C_shedding for a in A for t in T for s in S[2:end]) 
+        + π * Δt * sum(power_dumping[s, a, t] * C_dumping for a in A for t in T for s in S[2:end])
+        + π * Δt * sum(C_bypass * flow_bypass[s, p, t] + C_spill * flow_spill[s, p, t] for s in S[2:end] for t in T for p in P_h)
+        + π * sum((-volume[s, p, T[end]] + volume[0, p, 0]) * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_h for s in S[2:end])
+        + sum(startup[p, t] * C_startup for p in P_t for t in T))
 
     # print_model_info(model)
     # println(objective_function(model))
@@ -143,19 +157,23 @@ end
 
 function write_results(model)
 
-    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, S = read_input_data()
+    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, C_spill, C_bypass, S = read_input_data()
 
     production = value.(model[:production])
+    up_activation = value.(model[:up_activation])
+    down_activation = value.(model[:down_activation])
     up_reserve = value.(model[:up_reserve])
     down_reserve = value.(model[:down_reserve])
     
-    production_df = DataFrame(id=Int[], scenario=Int[], plant_id=Int[], timestep=Int[], area=Int[], fuel_type=String[], production=Float64[], ub=Float64[], lb=Float64[])
+    production_df = DataFrame(id=Int[], scenario=Int[], plant_id=Int[], timestep=Int[], area=Int[],
+                                         fuel_type=String[], production=Float64[], up_activation=Float64[], down_activation=Float64[], ub=Float64[], lb=Float64[])
     id_counter = 1
     for p in P
         for t in T
             for s in S
                 row = (id_counter, s, p, t, plant_df[plant_df.plant_id .== p, :area][1], 
-                        plant_df[plant_df.plant_id .== p, :fuel_type][1], round(production[s, p, t], digits=2), 
+                        plant_df[plant_df.plant_id .== p, :fuel_type][1], round(production[s, p, t], digits=2),
+                        round(up_activation[s, p, t], digits=2), round(down_activation[s, p, t], digits=2), 
                         production[0, p, t] + up_reserve[p, t], production[0, p, t] - down_reserve[p, t])
                 push!(production_df, row)
                 id_counter += 1
@@ -232,4 +250,69 @@ function write_results(model)
 end
 
 
+function write_expanded_results(s)
+    sheetnames = []
+    filename = "discrete_results/results.xlsx"
+    XLSX.openxlsx(filename) do xf
+        sheetnames = XLSX.sheetnames(xf)
+    end
+    output = Dict{String, DataFrame}()
+    fractional_timesteps = 0:(1/s):24
+    for sheet in sheetnames
+        println("Writing expanded discrete results: $sheet")
+        data = DataFrame(XLSX.readtable(filename, sheet, infer_eltypes=true))
+        if sheet == "transmission"
+            sort!(data, [:line_id, :scenario, :timestep])
+            group_symbols = [:line_id, :scenario]
+        elseif sheet == "first_stage"
+            sort!(data, [:plant_id, :timestep])
+            group_symbols = [:plant_id]
+        elseif sheet == "production" || sheet == "hydro_results"
+            sort!(data, [:plant_id, :scenario, :timestep])
+            group_symbols = [:plant_id, :scenario]
+        elseif sheet == "area_results"
+            sort!(data, [:area, :scenario, :timestep])
+            group_symbols = [:area, :scenario]
+        end
+
+        
+        T = unique(data.timestep)
+        timesteps_per_hour = div(T[end], 24)
+        repeats_per_datapoint = div(s, timesteps_per_hour)
+        expanded_data = DataFrame()
+        for col in names(data)
+            expanded_data[!, col] = repeat(data[!, col], inner=repeats_per_datapoint)
+        end
+        grouped = groupby(expanded_data, group_symbols)
+        results = DataFrame()
+        for g in grouped
+            first_row = g[1, :] |> DataFrame
+            g = vcat(first_row, g)
+            if length(fractional_timesteps) != nrow(g)
+                error("Mismatch between expected and actual timestep lengths for group.")
+            end
+            g.timestep_fractional = fractional_timesteps
+            append!(results, g)
+        end
+        # expanded_data.timestep_fractional = [div(timestep - 1, timesteps_per_hour) + (1 / s) * (mod(i-1, s)) for (i, timestep) in enumerate(expanded_data.timestep)]
+        # display(expanded_data)
+        results.timestep_fractional .= round.(results.timestep_fractional, digits=4)
+        output[sheet] = results
+    end
+    for (sheetname, df) in output
+        CSV.write("discrete_results/$sheetname" * "_expanded.csv", df)
+    end
+    
+    # XLSX.writetable("discrete_results/results_expanded.xlsx",   "transmission" => output["transmission"], 
+    #                                                             "first_stage" => output["first_stage"], 
+    #                                                             "production" => output["production"], 
+    #                                                             "area_results" => output["area_results"], 
+    #                                                             "hydro_results" => output["hydro_results"], overwrite=true)
+
+    # XLSX.writetable("discrete_results/results_expanded.xlsx", modified_sheets, overwrite=true)
+    # XLSX.openxlsx("discrete_results/results_expanded.xlsx", mode="w") do new_xf
+    #     for (sheetname, df) in modified_sheets
+    #         println("Writing sheet: $sheetname")
+    #         XLSX.writedata!(new_xf, sheetname, Tables.matrix(df))
+end
 

@@ -7,34 +7,48 @@ include("C:/Users/vegardvk/vscodeProjects/bernstein/plot_results.jl")
 include("C:/Users/vegardvk/vscodeProjects/bernstein/find_bernstein_weights.jl")
 include("C:/Users/vegardvk/vscodeProjects/bernstein/continuous_write_results.jl")
 
+function process_raw_data(steps_per_hour, scenarios)
+    process_wind_ts_data(steps_per_hour, scenarios)
+    process_load_data(12, scenarios)
+    process_plant_data(steps_per_hour, scenarios)
+end
+
+function get_input_weights(bernstein_degree, weights_sp, res_sp, timesteps, scenarios)
+
+    # Find weights for wind, load and inflow
+    prepare_parameter_weights(bernstein_degree, timesteps, weights_sp) # weights_sp)
+    
+    # Find weights for upper and lower production bounds
+    continuity_constraint = true
+    column_list = [:ub, :lb, :production]
+    power_plants = []
+    scenarios = 0:scenarios
+    find_and_write_production_weights(bernstein_degree, column_list, continuity_constraint, timesteps, weights_sp, power_plants, scenarios)
+    convert_production_weights_to_values(column_list, res_sp)
+
+    # Plot discrete bounds alongside converted continuous bounds
+    # plot_continuous_and_discrete_bounds(bernstein_degree, power_plants)
+end
+
+function run_continuous_model(n_scen, sampling_points)
+    scenarios = 1:n_scen
+    model = define_and_solve_model(scenarios)
+    write_results(model, sampling_points, scenarios)
+    calculate_objective_components_continuous()
+end
+
 
 steps_per_hour = 1
-# process_wind_ts_data(steps_per_hour)
-# process_load_data(steps_per_hour)
-# process_plant_data(steps_per_hour)
+input_data_scenarios = 4
+simulation_scenarios = input_data_scenarios-1
+bernstein_degree = 4
 
-bernstein_degree = 3
-sampling_points = 600
-timesteps = 24
-continuity_constraint = true
-column_list = [:ub, :lb]
-power_plants = []
-scenarios = []
-# find_and_write_inflow_weights(bernstein_degree)
-# find_and_write_wind_weights(bernstein_degree)
-# find_and_write_demand_weights(bernstein_degree)
-# find_and_write_production_weights(bernstein_degree, column_list, continuity_constraint, timesteps, sampling_points, power_plants, scenarios)
+weights_calc_sampling_points = 600
+res_sampling_points = 60
+continuous_timesteps = 24 * steps_per_hour
 
+# process_raw_data(steps_per_hour, input_data_scenarios)
+# Run discrete model
+get_input_weights(bernstein_degree, weights_calc_sampling_points, res_sampling_points, continuous_timesteps, simulation_scenarios)
+run_continuous_model(simulation_scenarios, res_sampling_points)
 
-sampling_points = 60
-convert_production_weights_to_values(column_list, sampling_points)
-plot_continuous_and_discrete_bounds(bernstein_degree, power_plants)
-
-# find_and_write_shedding_weights(bernstein_degree, false)
-# find_and_write_dumping_weights(bernstein_degree, false)
-
-
-model = define_and_solve_model([0, 1])
-# println(model)
-write_results(model, sampling_points, [0, 1])
-# calculate_objective_components_continuous()

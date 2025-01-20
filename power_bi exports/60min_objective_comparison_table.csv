@@ -1,0 +1,100 @@
+﻿component,area,scenario,Value continuous,Value discrete
+Bypass cost,1,1,0,0
+Bypass cost,2,1,0,0
+Bypass cost,3,1,0,0
+Bypass cost,1,2,0,0
+Bypass cost,2,2,0,0
+Bypass cost,3,2,0,0
+Bypass cost,1,3,0,0
+Bypass cost,2,3,0,0
+Bypass cost,3,3,0,0
+Day-ahead costs,1,1,18009.76,18025.14
+Day-ahead costs,2,1,0,0
+Day-ahead costs,3,1,16707.02,16677.53
+Day-ahead costs,1,2,18009.76,18025.14
+Day-ahead costs,2,2,0,0
+Day-ahead costs,3,2,16707.02,16677.53
+Day-ahead costs,1,3,18009.76,18025.14
+Day-ahead costs,2,3,0,0
+Day-ahead costs,3,3,16707.02,16677.53
+down-activation cost,1,1,-195.38,0
+down-activation cost,2,1,0,0
+down-activation cost,3,1,-274.94,0
+down-activation cost,1,2,-2528.5899999999997,-3197.5
+down-activation cost,2,2,0,0
+down-activation cost,3,2,-9986.34,-7670.27
+down-activation cost,1,3,-513.1,-373.37
+down-activation cost,2,3,0,0
+down-activation cost,3,3,-2438.84,-2487.33
+Down-reserve,1,1,1111.4534562000001,1111.4534562000001
+Down-reserve,2,1,0,0
+Down-reserve,3,1,4440.644496,4440.644496
+Down-reserve,1,2,1111.4534562000001,1111.4534562000001
+Down-reserve,2,2,0,0
+Down-reserve,3,2,4440.644496,4440.644496
+Down-reserve,1,3,1111.4534562000001,1111.4534562000001
+Down-reserve,2,3,0,0
+Down-reserve,3,3,4440.644496,4440.644496
+Dumping,1,1,0,0
+Dumping,2,1,0,0
+Dumping,3,1,0,0
+Dumping,1,2,0,0
+Dumping,2,2,0,0
+Dumping,3,2,12.17,0
+Dumping,1,3,0,0
+Dumping,2,3,0,0
+Dumping,3,3,0,0
+Shedding,1,1,4246.67,16294.66666666671
+Shedding,2,1,0,0
+Shedding,3,1,2369.33,7677.333333333352
+Shedding,1,2,0,0
+Shedding,2,2,0,0
+Shedding,3,2,0,0
+Shedding,1,3,0,0
+Shedding,2,3,0,0
+Shedding,3,3,0,0
+Spill cost,1,1,0,0
+Spill cost,2,1,0,0
+Spill cost,3,1,11051.130000000001,12043.45
+Spill cost,1,2,0,0
+Spill cost,2,2,0,0
+Spill cost,3,2,0,0
+Spill cost,1,3,0,0
+Spill cost,2,3,0,0
+Spill cost,3,3,290.8,34.51
+Start,1,1,400,400
+Start,2,1,0,0
+Start,3,1,0,0
+Start,1,2,400,400
+Start,2,2,0,0
+Start,3,2,0,0
+Start,1,3,400,400
+Start,2,3,0,0
+Start,3,3,0,0
+up-activation cost,1,1,2628.3,1921.42
+up-activation cost,2,1,0,0
+up-activation cost,3,1,6955.45,6930.9400000000005
+up-activation cost,1,2,279.24,0
+up-activation cost,2,2,0,0
+up-activation cost,3,2,23.89,0
+up-activation cost,1,3,1606.93,1539.52
+up-activation cost,2,3,0,0
+up-activation cost,3,3,4642.6500000000015,4481.83
+Up-reserve,1,1,1208.3011225200003,1208.3011225200003
+Up-reserve,2,1,0,0
+Up-reserve,3,1,2720.306880000001,2720.306880000001
+Up-reserve,1,2,1208.3011225200003,1208.3011225200003
+Up-reserve,2,2,0,0
+Up-reserve,3,2,2720.306880000001,2720.306880000001
+Up-reserve,1,3,1208.3011225200003,1208.3011225200003
+Up-reserve,2,3,0,0
+Up-reserve,3,3,2720.306880000001,2720.306880000001
+Water,1,1,0,0
+Water,2,1,0,0
+Water,3,1,23393.82,23622.273416587628
+Water,1,2,0,0
+Water,2,2,0,0
+Water,3,2,6744.5199999999995,9007.042719047407
+Water,1,3,0,0
+Water,2,3,0,0
+Water,3,3,18907.960000000003,18886.51758651501

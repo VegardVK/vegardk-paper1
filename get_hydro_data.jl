@@ -11,7 +11,7 @@ function add_start_reservoir!(df)
     end
 end
 
-function write_inflow_table(hydro_df, timesteps)
+function write_inflow_table(hydro_df, timesteps, scenarios)
     df = DataFrame(plant_id=Int[], timestep=Int[], inflow=Float64[])
     for row in eachrow(hydro_df)
         if row["plant_id"] == 49927
@@ -24,6 +24,9 @@ function write_inflow_table(hydro_df, timesteps)
             end
         end
     end
+    original_df_length = nrow(df)
+    df = repeat(df, inner=(scenarios+1))
+    df.scenario = repeat(0:scenarios, outer=original_df_length)
     XLSX.writetable("output/inflow_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 end
 
@@ -46,7 +49,7 @@ end
 
 function set_wv!(I_disch, df, p, energy_price)
     for p2 in I_disch[p]
-        df.fuel_price[df.plant_id .== p2] = df.fuel_price[df.plant_id .== p] +  energy_price * df.enekv[df.plant_id .== p2]
+        df.fuel_price[df.plant_id .== p2] = df.fuel_price[df.plant_id .== p] +  energy_price * df.enekv[df.plant_id .== p2] * 3.6
         # println("Fuel price in $p2 = $energy_price * $(enekv[p2]) + $(fuel_price[p]) = $(fuel_price[p2])")
         if length(I_disch[p2]) > 0
             set_wv!(I_disch, df, p2, energy_price)
