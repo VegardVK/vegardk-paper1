@@ -21,11 +21,11 @@ function process_plant_data(steps_per_hour, scenarios)
     P_w = wind_df[:, "gen_index"]
     P_a = Dict(
         1 => P_t,
-        2 => P_w,
+        # 2 => P_w,
         # 3 => [i for i in 21:30],
     )
-    output_df = DataFrame(plant_id=Int[], area=Int[], gen_ub=Float64[], gen_lb=Float64[], fuel_type=String[], fuel_price=Float64[])
-    for a in 1:2
+    output_df = DataFrame(plant_id=Int[], area=Int[], gen_ub=Float64[], gen_lb=Float64[], fuel_type=String[], fuel_price=Float64[], ramp_rate=Float64[])
+    for a in keys(P_a)
         for p in P_a[a]
             p_max = input_df[input_df.gen_index .== p, "PMax MW"][1]
             p_min = input_df[input_df.gen_index .== p, "PMin MW"][1]
@@ -34,14 +34,20 @@ function process_plant_data(steps_per_hour, scenarios)
             if fuel_type != "Wind"
                 fuel_type = "Thermal"
             end
-            row = (p, a, p_max, p_min, fuel_type, fuel_price)
+            if fuel_type == "Thermal"
+                ramp_rate = input_df[input_df.gen_index .== p, "Ramp Rate MW/Min"][1]
+            else
+                ramp_rate = 0
+            end
+            row = (p, a, p_max, p_min, fuel_type, fuel_price, ramp_rate)
             push!(output_df, row)
         end
     end
 
     hydro_df = process_hydro_data(steps_per_hour, scenarios)
     for hydro_row in eachrow(hydro_df)
-        output_row = (hydro_row["plant_id"], 3, hydro_row["kap_gen_mw"], 0, "Hydro", hydro_row["fuel_price"])
+        output_row = (hydro_row["plant_id"], 2, hydro_row["kap_gen_mw"], 0, "Hydro", hydro_row["fuel_price"], 100)
+        # output_row = (hydro_row["plant_id"], 3, hydro_row["kap_gen_mw"], 0, "Hydro", hydro_row["fuel_price"])
         push!(output_df, output_row)
     end
     XLSX.writetable("output/plant_data.xlsx", output_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
@@ -113,6 +119,8 @@ function process_hydro_data(steps_per_hour, scenarios)
     set_wv!(I_disch, df, end_reservoir, energy_price)
     add_start_reservoir!(df)
     write_inflow_table(df, 24 * steps_per_hour, scenarios)
+
+    # df.kap_mag .= ifelse.(df.kap_mag .== 0, df.kap_gen_m3s, df.kap_mag)
     XLSX.writetable("output/hydro_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
     return df
 end
@@ -144,16 +152,20 @@ function process_load_data_old(steps_per_hour, scenarios)
     display(df)
     df = generate_scenarios(df, :Forbruk, scenarios)
     display(df)
-
-    XLSX.writetable("output/load_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+    filename = "output/" * string(60/steps_per_hour)*"min_"* "load_data.xlsx"
+    XLSX.writetable(filename, df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 end
 
 
-function process_load_data(steps_per_hour, scenarios)
+function process_load_data(steps_per_hour, scenarios, sampling_points=600)
+    target_load_peak_hydro = 510
+    target_load_peak_thermal = 580
+
+    caiso_area = 1
+    nyiso_area = 2
+
     caiso_load_df = CSV.read("input/CAISO load data/CAISO-netdemand-20190101.csv", DataFrame)
     nyiso_load_df = CSV.read("input/NYISO load data/20190101pal.csv", DataFrame, delim=",")
-    target_load_peak_hydro = 610
-    target_load_peak_thermal = 680
 
     rename!(nyiso_load_df, "Time Stamp" => "timestamp", "Load" => "load")
     nyiso_load_df.timestamp = map(String, nyiso_load_df.timestamp)
@@ -164,7 +176,7 @@ function process_load_data(steps_per_hour, scenarios)
     nyiso_load_df = change_resolution(nyiso_load_df, steps_per_hour)
     hydro_load_df = DataFrame(
         load = nyiso_load_df.load,
-        area = fill(3, nrow(nyiso_load_df)),
+        area = fill(nyiso_area, nrow(nyiso_load_df)),
         timestep = 1:nrow(nyiso_load_df)
     )
     
@@ -178,20 +190,26 @@ function process_load_data(steps_per_hour, scenarios)
     thermal_load_df = DataFrame(
         load = caiso_load_df.load,
         timestep = 1:nrow(nyiso_load_df),
-        area = fill(1, nrow(caiso_load_df))
+        area = fill(caiso_area, nrow(caiso_load_df))
     )
     # thermal_load_df.load .= thermal_load_df.load .* (target_load_peak_thermal/maximum(thermal_load_df.load)) 
     
-    wind_load_df = DataFrame(
-        load = fill(0, nrow(caiso_load_df)),
-        timestep = 1:nrow(nyiso_load_df),
-        area = fill(2, nrow(caiso_load_df))
-    )
-    load_df = vcat(thermal_load_df, wind_load_df, hydro_load_df)
+    # wind_load_df = DataFrame(
+    #     load = fill(0, nrow(caiso_load_df)),
+    #     timestep = 1:nrow(nyiso_load_df),
+    #     area = fill(2, nrow(caiso_load_df))
+    # )
+    # load_df = vcat(thermal_load_df, wind_load_df, hydro_load_df)
+    load_df = vcat(thermal_load_df, hydro_load_df)
     load_df = generate_scenarios(load_df, :load, scenarios)
     # display(load_df)
-    XLSX.writetable("output/load_data.xlsx", load_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+    filename = string(div(60,steps_per_hour))*"min_load_data"
+    XLSX.writetable("output/" * filename * ".xlsx", load_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 
+    load_df[!, :load] ./= steps_per_hour
+    expanded_load_df = expand_timeseries(load_df, sampling_points, [:area, :scenario], [:load])
+    XLSX.writetable("output/" * filename * "_expanded.xlsx", expanded_load_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+    CSV.write("output/" * filename * "_expanded.csv", expanded_load_df)
 end
 
 function change_resolution(df::DataFrame, steps_per_hour::Int)

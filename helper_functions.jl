@@ -76,3 +76,36 @@ end
 function get_water_value()
     return 10
 end
+
+function expand_timeseries(data::DataFrame, s::Int, group_symbols, value_symbols)
+    T = unique(data.timestep)
+    Δt = 24/T[end]
+
+    timesteps_per_hour = div(T[end], 24)
+    repeats_per_datapoint = div(s, timesteps_per_hour)
+    expanded_data = DataFrame()
+    fractional_timesteps = 0:(1/s):24
+    sort!(data, vcat(group_symbols, :timestep))
+    for col in names(data)
+        expanded_data[!, col] = repeat(data[!, col], inner=repeats_per_datapoint)
+    end
+    
+    for col in value_symbols
+        expanded_data[!, col] ./= Δt
+    end
+    
+    grouped = groupby(expanded_data, group_symbols)
+    results = DataFrame()
+    
+    for g in grouped
+        first_row = g[1, :] |> DataFrame
+        g = vcat(first_row, g)
+        if length(fractional_timesteps) != nrow(g)
+            error("Mismatch between expected and actual timestep lengths for group.")
+        end
+        g.timestep_fractional = fractional_timesteps
+        results = vcat(results, g)
+    end
+    results.timestep_fractional .= round.(results.timestep_fractional, digits=4)
+    return results
+end

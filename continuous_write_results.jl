@@ -30,6 +30,7 @@ function write_results(model, sampling_points, S_input=[])
     write_aggregated_results(model_results, input_sets, input_parameters)
     write_expanded_results(model_results, input_sets, input_parameters, sampling_points)
     write_weight_results(model_results, input_sets, input_parameters)
+
     # frequency = value.(model[:frequency])
     # frequency_d = value.(model[:frequency_d])
     # frequency_expanded_df = get_expanded_frequency_result(sampling_points, frequency, frequency_d, T)
@@ -70,7 +71,6 @@ end
 function write_aggregated_results(model_results, input_sets, input_parameters)
     hydro_aggregated_df = get_aggregated_hydro_results(model_results, input_sets)
     CSV.write("continuous_results/hydro_results_aggregated.csv", hydro_aggregated_df)
-
     production_aggregated_df = get_aggregated_prod_results(model_results, input_sets, input_parameters)
     CSV.write("continuous_results/production_aggregated.csv", production_aggregated_df)
     area_aggregated_df = get_aggregated_area_results(model_results, input_sets, input_parameters)
@@ -132,6 +132,7 @@ end
 function get_aggregated_hydro_results(model_results, input_sets)
     @unpack volume_end = model_results
     @unpack T, P_h, S = input_sets
+    Δt = 24/T[end]
     expanded_df = get_expanded_hydro_results(model_results, input_sets, 1000, T[end])
 
     df_avg = combine(groupby(expanded_df, [:timestep, :plant_id, :scenario]), 
@@ -143,6 +144,9 @@ function get_aggregated_hydro_results(model_results, input_sets)
                     :volume => mean => :volume)
                     # :scenario => first => :scenario)
     # new_array =  [volume_end[s, p, t] for t in T for p in P_h for s in S]
+    for col in [:discharge, :bypass, :spill, :controlled_inflow, :controlled_outflow]
+        df_avg[!, col] .= df_avg[!, col] .* Δt
+    end
     df_avg.volume_res = [volume_end[s, p, t] for t in T for p in P_h for s in S]
     return df_avg
 end
@@ -277,6 +281,7 @@ end
 
 function get_aggregated_prod_results(model_results, input_sets, input_parameters)
     @unpack T = input_sets
+    Δt = 24/T[end]
     expanded_df = get_expanded_prod_results(model_results, input_sets, input_parameters, 1000, T[end])
     df_avg = combine(groupby(expanded_df, [:timestep, :plant_id, :scenario]), 
                     :production => mean => :production,
@@ -286,6 +291,10 @@ function get_aggregated_prod_results(model_results, input_sets, input_parameters
                     :fuel_type => first => :fuel_type,
                     :status => first => :status,
                     :startup => first => :startup)
+
+    for col in [:production, :up_activation, :down_activation]
+        df_avg[!, col] .= df_avg[!, col] .* Δt
+    end
     # new_array =  [volume_end[p, t] for t in T for p in P_h]
     # df_avg.volume_res = [volume_end[p, t] for t in T for p in P_h]
     df_avg.production = round.(df_avg.production, digits=2)
@@ -358,11 +367,15 @@ end
 
 function get_aggregated_area_results(model_results, input_sets, input_parameters)
     @unpack T = input_sets
+    Δt = 24/T[end]
     expanded_df = get_expanded_area_results(model_results, input_sets, input_parameters, 1000, T[end])
     df_avg = combine(groupby(expanded_df, [:timestep, :area, :scenario]),
                     :load => mean => :load,
                     :load_shedding => mean => :load_shedding,
                     :power_dumping => mean => :power_dumping)
+    for col in [:load, :load_shedding, :power_dumping]
+        df_avg[!, col] .= df_avg[!, col] .* Δt
+    end
     return df_avg
 end
 
@@ -402,11 +415,15 @@ end
 
 function get_aggregated_transmission_results(model_results, input_sets, input_parameters)
     @unpack T = input_sets
+    Δt = 24/T[end]
     expanded_df = get_expanded_transmission_results(model_results, input_sets, input_parameters, 10000, T[end])
     df_avg = combine(groupby(expanded_df, [:timestep, :line_id, :scenario]),
                     :transmission => mean => :transmission,
                     :area_from => first => :area_from,
                     :area_to => first => :area_to)
+    for col in [:transmission]
+        df_avg[!, col] .= df_avg[!, col] .* Δt
+    end
     df_avg.transmission = round.(df_avg.transmission, digits=2)
     return df_avg
 end

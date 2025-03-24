@@ -1,30 +1,37 @@
 using DataFrames
 using XLSX
 using CSV
+using UnPack
 
 include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
 include("C:/Users/vegardvk/vscodeProjects/bernstein/find_bernstein_weights.jl")
 
 
 function import_data_discrete()
-    prod_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "production", infer_eltypes=true))
-    first_stage_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "first_stage", infer_eltypes=true))
-    flow_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "transmission", infer_eltypes=true))
-    area_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "area_results", infer_eltypes=true))
-    hydro_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "hydro_results", infer_eltypes=true))
-    line_df = DataFrame(XLSX.readtable("output/line_data.xlsx", "Sheet1", infer_eltypes=true))
+    model_results =(
+        prod_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "production", infer_eltypes=true)),
+        first_stage_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "first_stage", infer_eltypes=true)),
+        flow_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "transmission", infer_eltypes=true)),
+        area_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "area_results", infer_eltypes=true)),
+        hydro_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "hydro_results", infer_eltypes=true)),
+        line_df = DataFrame(XLSX.readtable("output/line_data.xlsx", "Sheet1", infer_eltypes=true)),
+    )
+    @unpack prod_df, flow_df, line_df = model_results
 
     A = unique(prod_df.area)
-    P = unique(prod_df.plant_id)
-    T = unique(prod_df.timestep)
-    L = unique(flow_df.line_id)
-    S = unique(prod_df.scenario)
-    L_in = Dict(a => unique(line_df[line_df.area_to .== a, :line_id]) for a in A) 
-    L_out =  Dict(a => unique(line_df[line_df.area_from .== a, :line_id]) for a in A)
-
     area_grouped_plants = groupby(prod_df, :area)
-    P_a = Dict(g.area[1] => unique(g.plant_id) for g in area_grouped_plants)
-    return prod_df, flow_df, area_df, hydro_df, line_df, first_stage_df, A, P, T, L, S, L_in, L_out, P_a
+    input_sets = (
+        A = unique(prod_df.area),
+        P = unique(prod_df.plant_id),
+        T = unique(prod_df.timestep),
+        L = unique(flow_df.line_id),
+        S = unique(prod_df.scenario),
+        L_in = Dict(a => unique(line_df[line_df.area_to .== a, :line_id]) for a in A) ,
+        L_out =  Dict(a => unique(line_df[line_df.area_from .== a, :line_id]) for a in A),
+        P_a = Dict(g.area[1] => unique(g.plant_id) for g in area_grouped_plants)
+    )
+    return model_results, input_sets
+    # return prod_df, flow_df, area_df, hydro_df, line_df, first_stage_df, A, P, T, L, S, L_in, L_out, P_a
 end
 
 function import_data_continuous()
@@ -47,7 +54,9 @@ end
 
 
 function plot_energy_balance()
-    prod_df, flow_df, area_df, hydro_df, line_df, A, P, T, L, L_in, L_out, P_a = import_data_discrete()
+    model_results, input_sets  = import_data_discrete()
+    @unpack prod_df, flow_df, area_df, hydro_df, line_df = model_results
+    @unpack A, P, T, L, L_in, L_out, P_a = input_sets
 
     prod_df_wide = unstack(select(prod_df, :timestep, :production, :plant_id), :plant_id, :production)
     area_load_df_wide = unstack(select(area_df, :timestep, :load, :area), :area, :load)
@@ -107,10 +116,12 @@ function plot_hydro_balance()
 end
 
 function calculate_objective_components_discrete()
-    prod_df, flow_df, area_df, hydro_df, line_df, first_stage_df, A, P, T, L, S, L_in, L_out, P_a, = import_data_discrete()
+    model_results, input_sets  = import_data_discrete()
+    @unpack prod_df, flow_df, area_df, hydro_df, line_df, first_stage_df = model_results
+    @unpack A, P, T, L, S, L_in, L_out, P_a = input_sets
+
     Δt = 24/T[end]
     π = 1/S[end]
-    S = S[2:end]
 
     plant_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
     hydro_data_df = DataFrame(XLSX.readtable("output/hydro_data.xlsx", "Sheet1", infer_eltypes=true))
@@ -124,7 +135,7 @@ function calculate_objective_components_discrete()
 
     # prod_df_wide = unstack(select(prod_df, :timestep, :production, :plant_id), :plant_id, :production)
 
-    day_ahead_fuel_costs = round(Δt * sum(prod_df[(prod_df.scenario .== 0) .& (prod_df.timestep .== t) .& (prod_df.plant_id .== p), :production][1] 
+    day_ahead_fuel_costs = round(Δt * sum(first_stage_df[(first_stage_df.timestep .== t) .& (first_stage_df.plant_id .== p), :first_stage_prod][1] 
             * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for p in P_t for t in T), digits=2)
 
     up_activation_costs = round(π * Δt * sum(prod_df[(prod_df.scenario .== s) .& (prod_df.timestep .== t).& (prod_df.plant_id .== p), :up_activation][1] 
@@ -191,7 +202,7 @@ function calculate_objective_components_discrete()
             for p in P_a[a]
 
                 if p in P_t
-                    fuel_costs += Δt * π * sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p) .& (prod_df.scenario .== s), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for t in T)
+                    # fuel_costs += Δt * π * sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p) .& (prod_df.scenario .== s), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for t in T)
                     startup_costs += sum(first_stage_df[(first_stage_df.timestep .== t) .& (first_stage_df.plant_id .== p), :startup][1] * C_startup for t in T)
                     fuel_price = plant_df[plant_df.plant_id .== p, :fuel_price][1]
                 elseif p in P_h
@@ -205,7 +216,7 @@ function calculate_objective_components_discrete()
                 if p in union(P_t, P_h)
                     up_reserve_costs += Δt * 0.1 * sum(first_stage_df[(first_stage_df.timestep .== t) .& (first_stage_df.plant_id .== p), :up_reserve][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for t in T)
                     down_reserve_costs += Δt * 0.1 * sum(first_stage_df[(first_stage_df.timestep .== t) .& (first_stage_df.plant_id .== p), :down_reserve][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for t in T)
-                    day_ahead_costs += round(π * Δt * sum(prod_df[(prod_df.scenario .== 0) .& (prod_df.timestep .== t) .& (prod_df.plant_id .== p), :production][1] * fuel_price for t in T), digits=2)
+                    day_ahead_costs += round(π * Δt *  sum(first_stage_df[(first_stage_df.timestep .== t) .& (first_stage_df.plant_id .== p), :first_stage_prod][1] * fuel_price for t in T), digits=2)
                     up_activation_costs += round(π * Δt * sum(prod_df[(prod_df.scenario .== s) .& (prod_df.timestep .== t).& (prod_df.plant_id .== p), :up_activation][1] * fuel_price for t in T), digits=2)
                     down_activation_costs += - round(π * Δt * sum(prod_df[(prod_df.scenario .== s) .& (prod_df.timestep .== t).& (prod_df.plant_id .== p), :down_activation][1] *fuel_price for t in T), digits=2)
                 end

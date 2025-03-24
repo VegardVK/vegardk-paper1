@@ -7,10 +7,10 @@ include("C:/Users/vegardvk/vscodeProjects/bernstein/plot_results.jl")
 include("C:/Users/vegardvk/vscodeProjects/bernstein/find_bernstein_weights.jl")
 include("C:/Users/vegardvk/vscodeProjects/bernstein/continuous_write_results.jl")
 
-function process_raw_data(steps_per_hour, scenarios)
-    process_wind_ts_data(steps_per_hour, scenarios)
-    process_load_data(12, scenarios)
-    process_plant_data(steps_per_hour, scenarios)
+function process_raw_data(steps_per_hour, scenarios, sampling_points)
+    # process_wind_ts_data(steps_per_hour, scenarios)
+    process_load_data(12, scenarios, sampling_points)
+    # process_plant_data(steps_per_hour, scenarios)
 end
 
 function get_input_weights(bernstein_degree, weights_sp, res_sp, timesteps, scenarios)
@@ -32,23 +32,23 @@ end
 
 function run_continuous_model(n_scen, sampling_points)
     scenarios = 1:n_scen
-    model = define_and_solve_model(scenarios)
-    write_results(model, sampling_points, scenarios)
+    model = define_and_solve_model() #scenarios)
+    write_results(model, sampling_points)# , scenarios)
     calculate_objective_components_continuous()
 end
 
 
-steps_per_hour = 1
-input_data_scenarios = 4
+steps_per_hour = 4
+input_data_scenarios = 10
 simulation_scenarios = input_data_scenarios-1
 bernstein_degree = 4
 
-weights_calc_sampling_points = 600
+weights_calc_sampling_points = 1800
 res_sampling_points = 60
 continuous_timesteps = 24 * steps_per_hour
 
-# process_raw_data(steps_per_hour, input_data_scenarios)
+process_raw_data(steps_per_hour, input_data_scenarios, res_sampling_points)
 # Run discrete model
-get_input_weights(bernstein_degree, weights_calc_sampling_points, res_sampling_points, continuous_timesteps, simulation_scenarios)
+get_input_weights(bernstein_degree, weights_calc_sampling_points, res_sampling_points, continuous_timesteps, input_data_scenarios)
 run_continuous_model(simulation_scenarios, res_sampling_points)
 

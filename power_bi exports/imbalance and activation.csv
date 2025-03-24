@@ -1,0 +1,7 @@
+﻿60 minute model;;;;;;;;;
+Net;;;;;Split;;;;
+;Continuous;Discrete;;;Continuous;Discrete;;;
+Sum net activation; 4 139 ; 2 781 ;;Up-activation;13619.68823;7498.743051;;;-2721.738779
+Sum absolute imbalance; 912 ; 3 006 ;;Down activation;10522.10454;10220.48183;;;
+Sum; 5 051 ; 5 787 ;;Remaining up-imbalance;481.4569299;1505.46826;;;
+;;;;Remaining down-imbalance;430.9312027;1500.9626;;;

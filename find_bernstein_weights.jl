@@ -93,8 +93,9 @@ function find_bounds_weights(lb_target, ub_target, prod_ref, max_prod, bernstein
     @constraint(model, deviation_summation_ub[s in S, t in T], deviation[s, t, 2] == sum(bernstein_curves[b, s] * weights[b, t, 2] for b in B) - ub_target[(t-1)*measuring_points_timestep + s+1]) 
     @constraint(model, deviation_summation_prod_ref[s in S, t in T], deviation[s, t, 3] == sum(bernstein_curves[b, s] * weights[b, t, 3] for b in B) - prod_ref[(t-1)*measuring_points_timestep + s + 1])
     
-    @constraint(model, ub_over_prod_ref[b in B, t in T],weights[b, t, 2] ≥ weights[b, t, 3])
-    @constraint(model, prod_ref_over_lb[b in B, t in T], weights[b, t, 3] ≥ weights[b, t, 1])
+    # @constraint(model, ub_over_prod_ref[b in B, t in T],weights[b, t, 2] ≥ weights[b, t, 3])
+    # @constraint(model, prod_ref_over_lb[b in B, t in T], weights[b, t, 3] ≥ weights[b, t, 1])
+    @constraint(model, ub_over_lb[b in B, t in T], weights[b, t, 2] ≥ weights[b, t, 1])
     ϵ = 0.01
     if max_prod ≥ ϵ
         @constraint(model, ub_under_max_prod[b in B, t in T], weights[b, t, 2] ≤ max_prod - ϵ)
@@ -102,8 +103,8 @@ function find_bounds_weights(lb_target, ub_target, prod_ref, max_prod, bernstein
         @constraint(model, ub_under_max_prod[b in B, t in T], weights[b, t, 2] ≤ max_prod)
     end
     if cont_constraints
-        @constraint(model, continuity_constraint1[t in T[1:end-1], i in type], weights[bernstein_degree, t, i] == weights[0, t+1, i])
-        @constraint(model, continuity_constraint2[t in T[1:end-1], i in type], weights[bernstein_degree, t, i] - weights[bernstein_degree-1, t, i] == weights[1, t+1, i] - weights[0, t+1, i])
+        @constraint(model, continuity_constraint1[t in T[1:end-1], i in type[1:2]], weights[bernstein_degree, t, i] == weights[0, t+1, i])
+        @constraint(model, continuity_constraint2[t in T[1:end-1], i in type[1:2]], weights[bernstein_degree, t, i] - weights[bernstein_degree-1, t, i] == weights[1, t+1, i] - weights[0, t+1, i])
     end
     # @objective(model, Min, sum(deviation[s, t]^2 for s in S for t in T))
     @variable(model, deviation_pos[s in S, t in T, i in type] >= 0)
@@ -193,7 +194,7 @@ function get_converted_list(weights_df, sampling_points, include_first=true)
 end
 
 function find_and_write_production_weights(bernstein_degree, column_symbols,  cont_constraints, timesteps, measuring_points, P=[], S=[])
-    df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "production", infer_eltypes=true))
+    df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "first_stage", infer_eltypes=true))
     plant_data_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
     output_df = DataFrame()
     if length(P) == 0
@@ -202,12 +203,19 @@ function find_and_write_production_weights(bernstein_degree, column_symbols,  co
     if length(S) == 0
         S = unique(df.scenario)
     end
+    wind_df = DataFrame(XLSX.readtable("output/wind_power_weights.xlsx", "Sheet1", infer_eltypes=true))
+    P_w = unique(plant_data_df[plant_data_df.fuel_type .== "Wind", :plant_id])
 
     for p in P
+
         ub = plant_data_df[plant_data_df.plant_id .== p, "gen_ub"][1]
-        lb_target = df[(df.plant_id .== p) .& (df.scenario .== 0), :lb]
-        ub_target = df[(df.plant_id .== p) .& (df.scenario .== 0), :ub]
-        prod_ref = df[(df.plant_id .== p) .& (df.scenario .== 0), :production]
+        lb_target = df[(df.plant_id .== p), :lb]
+        ub_target = df[(df.plant_id .== p), :ub]
+        if p in P_w
+            lb_target .= 0
+            cont_constraints = false
+        end
+        prod_ref = df[(df.plant_id .== p), :first_stage_prod]
 
         weights_df = find_bounds_weights(lb_target, ub_target, prod_ref, ub, bernstein_degree, timesteps, measuring_points, cont_constraints)
 
@@ -353,14 +361,11 @@ end
 function prepare_parameter_weights(nB, nT, nS)
     # find_and_write_parameter_weights(nB, nT, nS, "output/inflow_data.xlsx", :inflow, :plant_id)
     # find_and_write_parameter_weights(nB, nT, nS, "output/wind_ts_data.xlsx", :wind_power, :plant_id)
-    find_and_write_parameter_weights(nB, nT, nS, "output/original_load_expanded.xlsx", :load, :area)
+    find_and_write_parameter_weights(nB, nT, nS, "output/5min_load_data.xlsx", :load, :area)
 end
 
 function find_and_write_parameter_weights(nB, nT, nS, input_file, val_col, idx_col)
     input_df = DataFrame(XLSX.readtable(input_file, "Sheet1", infer_eltypes=true))
-    if val_col == Symbol("load")
-        display(input_df)
-    end
     weights_df = DataFrame()
     idx_set = unique(input_df[:, idx_col])
     # display(input_df)
@@ -368,6 +373,7 @@ function find_and_write_parameter_weights(nB, nT, nS, input_file, val_col, idx_c
     for i in idx_set
         for s in S
             input_ts = input_df[(input_df[:, idx_col] .== i) .& (input_df[:, :scenario] .== s), val_col]
+            # input_ts ./= div(length(input_ts), nT)
             df = find_bernstein_weights(input_ts, nB, nT, string(val_col), nS)
             df[:, idx_col] .= i
             df.scenario .= s

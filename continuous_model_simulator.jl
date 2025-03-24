@@ -24,13 +24,13 @@ function read_input_data(S_input)
         dumping_df = DataFrame(XLSX.readtable("output/dumping_weights.xlsx", "Sheet1", infer_eltypes=true)),
         plant_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true)),
         line_df = DataFrame(XLSX.readtable("output/line_data.xlsx", "Sheet1", infer_eltypes=true)),
+        transmission_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "transmission", infer_eltypes=true))
     )
     @unpack plant_df, load_df, line_df = input_parameters
     A = unique(plant_df.area)
     area_grouped_plants = groupby(plant_df, :area)
-
-    if !(length(S_input)>=0)
-        S = unique(load_df.s)
+    if !(length(S_input)>0)
+        S = unique(load_df.scenario)
         S_input = S[2:end]
     end
     input_sets = (
@@ -56,7 +56,7 @@ end
 
 function define_and_solve_model(S_input=[])
     input_parameters, input_sets = read_input_data(S_input)
-    @unpack wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, prod_df, shedding_df, dumping_df = input_parameters
+    @unpack wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, prod_df, shedding_df, dumping_df, transmission_df = input_parameters
     @unpack A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, S, L_P, line_pairs = input_sets
     I_disch, I_spill, I_bypass = find_connected_plants(hydro_df)
     C_shedding, C_dumping, C_startup = get_cost_parameters()
@@ -91,8 +91,7 @@ function define_and_solve_model(S_input=[])
     @variable(model, volume_end[s in S, p in P_h, t in 0:T[end]] ≥ 0)
     @variable(model, volume[s in S, p in P_h, b in B_I, t in T])
 
-    @constraint(model, wind_production[s in S, p in P_w, b in B, t in T], prod[s, p, b, t] ≤ wind_df[(wind_df.plant_id .== p) .& (wind_df.timestep .== t) .&
-                                                                                                        (wind_df.scenario .== s) .& (wind_df.b .== b), :wind_power][1])
+    # @constraint(model, wind_production[s in S, p in P_w, b in B, t in T], prod[s, p, b, t] ≤ wind_df[(wind_df.plant_id .== p) .& (wind_df.timestep .== t) .& (wind_df.scenario .== s) .& (wind_df.b .== b), :wind_power][1])
 
     @constraint(model, controlled_inflow[s in S, p in P_h, b in B, t in T], total_flow_in[s, p, b, t] == sum(flow_disch[s, i, b, t] for i in I_disch[p]) 
                                                                                                             + sum(flow_bypass[s, i, b, t] for i in I_bypass[p]) 
@@ -118,21 +117,29 @@ function define_and_solve_model(S_input=[])
     @constraint(model, simple_vol_ub[s in S, p in P_h, t in T], volume_end[s, p, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
 
     @constraint(model, volume_weights[s in S, p in P_h, b in B_I, t in T], volume[s, p, b, t] == Δt * (1/(B[end]+1)) * sum(net_inflow[s, p, b2, t] for b2 in B[1:b]))
-    # @constraint(model, volume_ub[s in S, p in P_h, b in B_I, t in T], volume_end[s, p, t-1] + volume[s, p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
+    @constraint(model, volume_ub[s in S, p in P_h, b in B_I, t in T], volume_end[s, p, t-1] + volume[s, p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
+    @constraint(model, volume_lb[s in S, p in P_h, b in B_I, t in T], volume_end[s, p, t-1] + volume[s, p, b, t] ≥ 0)
 
     @variable(model, status[p in P, t in T_extended], Bin)
     @variable(model, startup[p in P, t in T_extended], Bin)
     @constraint(model, startup_count[p in P_t, t in T_extended[2:end]], startup[p, t] ≥ status[p, t] - status[p, t-1])
     # @constraint(model, min_production[s in S, p in union(P_t, P_h), t in T, b in B], prod[s, p, b, t] >=  
     #                                                                                         prod_df[(prod_df.scenario .== s) .& (prod_df.plant_id .== p) .& (prod_df.timestep .== t) .& (prod_df.b .== b), :lb][1]) 
+    # display(prod_df)
     @constraint(model, min_production[s in S, p in union(P_t, P_h), t in T, b in B], prod[s, p, b, t] ≥  
-                prod_df[(prod_df.scenario .== s) .& (prod_df.plant_id .== p) .& (prod_df.timestep .== t) .& (prod_df.b .== b), :lb][1])                                                                                         
-    @constraint(model, max_production[s in S, p in union(P_t, P_h), t in T, b in B], prod[s, p, b, t] ≤  
+                prod_df[(prod_df.scenario .== s) .& (prod_df.plant_id .== p) .& (prod_df.timestep .== t) .& (prod_df.b .== b), :lb][1])
+
+    @constraint(model, max_production[s in S, p in P, t in T, b in B], prod[s, p, b, t] ≤  
                 prod_df[(prod_df.scenario .== s) .& (prod_df.plant_id .== p) .& (prod_df.timestep .== t) .& (prod_df.b .== b), :ub][1])
     # display(prod_df)
-    @constraint(model, balancing_activation[s in S, p in union(P_t, P_h), t in T, b in B], prod[s, p, b, t] ==
+    @constraint(model, balancing_activation[s in S, p in P, t in T, b in B], prod[s, p, b, t] ==
                 prod_df[(prod_df.scenario .== 0) .& (prod_df.plant_id .== p) .& (prod_df.timestep .== t) .& (prod_df.b .== b), :production][1]
                 + up_activation[s, p, b, t] - down_activation[s, p, b, t])
+
+    # @variable(model, activating_up_bin[s in S, p in P, t in T], Bin)
+    # M = 10000
+    # @constraint(model, activating_up_const1[s in S, p in P, t in T, b in B], up_activation[s, p, b, t] ≤ M * activating_up_bin[s, p, t])
+    # @constraint(model, activating_up_const2[s in S, p in P, t in T, b in B], down_activation[s, p, b, t] ≤  M * (1-activating_up_bin[s, p, t]))
 
     # @constraint(model, unit_commitment1a[s in S, p in P_t, t in T], prod[s, p, 0, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
     # @constraint(model, unit_commitment1b[s in S, p in P_t, t in T], prod[s, p, 0, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
@@ -146,8 +153,8 @@ function define_and_solve_model(S_input=[])
     # @constraint(model, unit_commitment4a[s in S, p in P_t, t in T], prod[s, p, B[end]-1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
     # @constraint(model, unit_commitment4b[s in S, p in P_t, t in T], prod[s, p, B[end]-1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
 
-    @constraint(model, continuity_constraint1[s in S, p in P_t, t in T[1:end-1]], prod[s, p, B[end], t] == prod[s, p, 0, t+1])
-    @constraint(model, continuity_constraint2[s in S, p in P_t, t in T[1:end-1]], prod[s, p, B[end], t] - prod[s, p, B[end]-1, t] == prod[s, p, 1, t+1] - prod[s, p, 0, t+1])
+    @constraint(model, continuity_constraint1[s in S, p in union(P_t, P_h), t in T[1:end-1]], prod[s, p, B[end], t] == prod[s, p, 0, t+1])
+    @constraint(model, continuity_constraint2[s in S, p in union(P_t, P_h), t in T[1:end-1]], prod[s, p, B[end], t] - prod[s, p, B[end]-1, t] == prod[s, p, 1, t+1] - prod[s, p, 0, t+1])
 
 
     # @variable(model, frequency[i in B, t in T])
@@ -170,7 +177,7 @@ function define_and_solve_model(S_input=[])
                 # - M_eff * frequency[b, t]
                 # - D_eff * sum(frequency_d[j, t] * elevation_matrix[j+1, b+1] for j in B_D)
                 + sum(prod[s, p, b, t] for p in P_a[a])
-                + 0.99 * sum(transmission[s, l, b, t] for l in L_in[a])
+                + sum(transmission[s, l, b, t] for l in L_in[a]) # * 0.99
                 - sum(transmission[s, l, b, t] for l in L_out[a])
                 + shedding[s, b, a, t]
                 - dumping[s, b, a, t]
@@ -181,13 +188,24 @@ function define_and_solve_model(S_input=[])
     @constraint(model, one_directional_flow[s in S, pair in L_P, t in T], line_active[s, line_pairs[pair][1], t] + line_active[s, line_pairs[pair][2], t] .== 1)
     @constraint(model, transmission_ub[s in S, l in L, b in B, t in T], transmission[s, l, b, t] ≤ line_active[s, l, t] * line_df[line_df.line_id .== l, :capacity][1])
 
+    @variable(model, transmission_slack_pos[s in S, l in L, b in B, t in T] ≥ 0)
+    @variable(model, transmission_slack_neg[s in S, l in L, b in B, t in T] ≥ 0)
+    # @constraint(model, fix_transmission[s in S, l in L, b in B, t in T], transmission[s, l, b, t] + transmission_slack_pos[s, l, b, t] - transmission_slack_neg[s, l, b, t] == transmission_df[(transmission_df.line_id .== l) .& (transmission_df.timestep .== t) .& (transmission_df.scenario .== s), :transmission][1])
+
     # @constraint(model, max_transmission[s in S, l in L, b in B, t in T], 0 ≤ transmission[s, l, b, t] ≤  line_df[line_df.line_id .== l, :capacity][1])
 
     # @objective(model, Min, sum(prod[p, b, t] * get_bernstein_val(bernstein_degree, b, s/sampling_points) * p_dict["C"][p] for p in P for b in B for t in T for s in 0:sampling_points))
     bypass_penalty = 100
     spill_penalty = 100
+    activation_cost = 1
+    transmission_slack_cost = 10000
     @objective(model, Min, 
-                1/(B[end]+1) * Δt * π * (sum(prod[s, p, b, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for s in S for p in P_t for b in B for t in T)
+                1/(B[end]+1) * Δt * π * (sum(prod[s, p, b, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for s in S for p in union(P_t) for b in B for t in T)
+                + activation_cost * sum(up_activation[s, p, b, t] for s in S for p in P for b in B for t in T)
+                + activation_cost * sum(down_activation[s, p, b, t] for s in S for p in P for b in B for t in T)
+                + transmission_slack_cost * (sum(transmission_slack_pos[s, l, b, t] + transmission_slack_neg[s, l, b, t] for s in S for l in L for b in B for t in T))
+                # + 1.01 * sum(up_activation[s, p, b, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for s in S for p in union(P_t, P_h) for b in B for t in T)
+                # - 0.99 * sum(down_activation[s, p, b, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for s in S for p in union(P_t, P_h) for b in B for t in T)
                 + sum(shedding[s, b, a, t] * C_shedding + dumping[s, b, a, t] * C_dumping for s in S for b in B for a in A for t in T))
                 # + M_eff * sum(frequency_pos[b, t] * maximum(plant_df[:, :fuel_price]) for b in B for t in T)
                 # - M_eff * sum(frequency_neg[b, t] * maximum(plant_df[:, :fuel_price]) for b in B for t in T))
