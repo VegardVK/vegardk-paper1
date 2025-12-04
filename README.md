@@ -133,32 +133,7 @@ Main files:
 - `get_hydro_data.jl` - Hydropower data processing
 - `elevation_matrix.jl` - Matrix operations for elevation/volume curves
 
-## Notes
-
-- **First run**: Julia will compile functions, which takes longer than subsequent runs
-- **CPLEX license**: Ensure CPLEX is properly licensed and configured
-- **Memory**: Large scenarios may require significant RAM (8GB+ recommended)
-- **Runtime**: Continuous model with many scenarios can take considerable time to solve
-- **Results**: Output directories and files will be overwritten on each run
-
-## Troubleshooting
-
-**"ERROR: CPLEX not properly installed"**
-- Verify CPLEX installation and license
-- Reconfigure CPLEX.jl: `julia --project=. -e 'using Pkg; Pkg.build("CPLEX")'`
-
-**"ERROR: SystemError: opening file ... No such file or directory"**
-- Ensure all required input files are in the `input/` directory
-- Check that file names match exactly (case-sensitive on Unix systems)
-
-**"ERROR: could not load library libcplex..."**
-- CPLEX shared library not found
-- Add CPLEX library path to system PATH/LD_LIBRARY_PATH
-
-## License
-
-[Specify your license here - e.g., MIT, GPL, etc.]
 
 ## Citation
 
-If you use this code in your research, please cite: [Add paper reference when published]
+If you use this code in your research, please cite: https://ieeexplore.ieee.org/abstract/document/11050190
