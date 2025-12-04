@@ -7,7 +7,7 @@ using Random
 using Distributions
 using Dates
 
-include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
+include(joinpath(@__DIR__, "get_hydro_data.jl"))
 
 
 
@@ -97,7 +97,7 @@ function get_wind_ts(year=2020, month=1, day=1)
 end
 
 function process_hydro_data(steps_per_hour, scenarios)
-    file_path = "C:/Users/vegardvk/vscodeProjects/bernstein/Input/moduldata.xlsx"
+    file_path = joinpath(@__DIR__, "input", "moduldata.xlsx")
     # xf = XLSX.readxlsx(file_path)
     # sh = xf["Sheet1"]
 

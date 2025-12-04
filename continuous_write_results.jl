@@ -1,7 +1,7 @@
 using Statistics
 using UnPack
 
-# include("C:/Users/vegardvk/vscodeProjects/bernstein/continuous_model.jl")
+# include(joinpath(@__DIR__, "continuous_model.jl"))
 
 
 function write_results(model, sampling_points, S_input=[])

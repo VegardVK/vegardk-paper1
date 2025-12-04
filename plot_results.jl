@@ -3,8 +3,8 @@ using XLSX
 using CSV
 using UnPack
 
-include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/find_bernstein_weights.jl")
+include(joinpath(@__DIR__, "helper_functions.jl"))
+include(joinpath(@__DIR__, "find_bernstein_weights.jl"))
 
 
 function import_data_discrete()

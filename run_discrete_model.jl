@@ -1,6 +1,6 @@
-include("C:/Users/vegardvk/vscodeProjects/bernstein/process_input_data.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/discrete_model.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/plot_results.jl")
+include(joinpath(@__DIR__, "process_input_data.jl"))
+include(joinpath(@__DIR__, "discrete_model.jl"))
+include(joinpath(@__DIR__, "plot_results.jl"))
 
 
 steps_per_hour = 4

@@ -5,8 +5,8 @@ using CPLEX
 using UnPack
 
 
-include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
+include(joinpath(@__DIR__, "get_hydro_data.jl"))
+include(joinpath(@__DIR__, "helper_functions.jl"))
 
 function read_input_data(steps_per_hour)
     # Read input data

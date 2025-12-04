@@ -4,11 +4,11 @@ using JuMP
 using CPLEX
 using UnPack
 
-include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/find_bernstein_weights.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/plot_results.jl")
-include("C:/Users/vegardvk/vscodeProjects/bernstein/elevation_matrix.jl")
+include(joinpath(@__DIR__, "get_hydro_data.jl"))
+include(joinpath(@__DIR__, "helper_functions.jl"))
+include(joinpath(@__DIR__, "find_bernstein_weights.jl"))
+include(joinpath(@__DIR__, "plot_results.jl"))
+include(joinpath(@__DIR__, "elevation_matrix.jl"))
 
 
 

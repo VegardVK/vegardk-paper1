@@ -9,7 +9,7 @@ using CSV
 using AxisArrays
 using XLSX
 
-include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
+include(joinpath(@__DIR__, "helper_functions.jl"))
 
 function change_ts_resolution_to_second(input_ts, measuring_points, include_startpoint=true)
     steps_per_hour = div(length(input_ts),24)
